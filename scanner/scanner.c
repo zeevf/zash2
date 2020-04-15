@@ -22,23 +22,32 @@
 
 
 /** Functions ************************************************/
-enum zash_status scanner_is_scanned(int pid, struct VECTOR_context *scanned_pids, bool *is_scanned)
+enum zash_status
+scanner_is_scanned(pid_t pid, struct VECTOR_context *scanned_pids, bool *is_scanned)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
-    int *current_pid = NULL;
+    const pid_t *current_pid = NULL;
     bool temp_is_scanned = false;
+    const pid_t *const *scanned_array = NULL;
+    size_t scanned_size = 0;
     size_t i = 0;
 
     /* Check for valid parameters */
     ASSERT(NULL != scanned_pids);
     ASSERT(NULL != is_scanned);
+    //TODO: docu
+    status = VECTOR_as_array(scanned_pids, (const void *const **) &scanned_array, &scanned_size);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
 
     /* check that the given process is'nt already scanned. */
-    for (i = 0; i < scanned_pids->array_size; ++i) {
+    for (i = 0; i < scanned_size; ++i) {
 
         /* If the current pid is the same as the requested pid, this process was already scanned. */
-        current_pid = scanned_pids->array[i];
+        current_pid = scanned_array[i];
         if (*current_pid == pid) {
             temp_is_scanned = true;
             break;
@@ -51,16 +60,18 @@ enum zash_status scanner_is_scanned(int pid, struct VECTOR_context *scanned_pids
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
 
+lbl_cleanup:
+
     return status;
 
 }
 
 
-enum zash_status scanner_mark_as_scanned(int pid, struct VECTOR_context *scanned_pids)
+enum zash_status scanner_mark_as_scanned(pid_t pid, struct VECTOR_context *scanned_pids)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
-    int *allocated_pid = NULL;
+    pid_t *allocated_pid = NULL;
 
     /* Check for valid parameters */
     ASSERT(NULL != scanned_pids);
@@ -95,17 +106,16 @@ lbl_cleanup:
 }
 
 
-enum zash_status scanner_get_command_line(int pid,
-                                          size_t max_command_line,
-                                          char *command_line,
-                                          size_t *command_line_len)
+enum zash_status scanner_get_command_line(pid_t pid, size_t *command_line_len, char *command_line)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     FILE *cmd_file = NULL;
     char *cmd_path = NULL;
     size_t temp_command_line_len = 0;
+    size_t cmd_path_length = 0;
     int snprintf_return_value = C_STANDARD_FAILURE_VALUE;
+    bool is_fread_failed = false;
 
     /* Check for valid parameters */
     ASSERT(NULL != command_line);
@@ -117,10 +127,10 @@ enum zash_status scanner_get_command_line(int pid,
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
-    snprintf_return_value++;
+    cmd_path_length = snprintf_return_value + 1;
 
     /* Allocate memory for the path */
-    cmd_path = HEAPALLOCZ(snprintf_return_value * sizeof(*cmd_path));
+    cmd_path = HEAPALLOCZ(cmd_path_length * sizeof(*cmd_path));
     if (NULL == cmd_path) {
         status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_CALLOC_FAILED;
         DEBUG_PRINT("status: %d", status);
@@ -128,7 +138,7 @@ enum zash_status scanner_get_command_line(int pid,
     }
 
     /* Assemble the path of the file contains the command line */
-    snprintf_return_value = snprintf(cmd_path, snprintf_return_value, SCANNER_CMD_PATH_FORMAT, pid);
+    snprintf_return_value = snprintf(cmd_path, cmd_path_length, SCANNER_CMD_PATH_FORMAT, pid);
     if (C_STANDARD_FAILURE_VALUE == snprintf_return_value) {
         status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_SNPRINTF_FAILED;
         DEBUG_PRINT("status: %d", status);
@@ -143,7 +153,6 @@ enum zash_status scanner_get_command_line(int pid,
          * no longer exist. this is a different error */
         if (ENOENT == errno) {
             status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_FILE;
-
         }
         else {
             status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_FOPEN_FAILED;
@@ -154,9 +163,9 @@ enum zash_status scanner_get_command_line(int pid,
     }
 
     /* Read the command line. */
-    errno = ERRNO_SUCCESS;
-    temp_command_line_len = fread(command_line, sizeof(*command_line), max_command_line, cmd_file);
-    if (ZASH_STATUS_SUCCESS != errno) {
+    temp_command_line_len = fread(command_line, sizeof(*command_line), *command_line_len, cmd_file);
+    is_fread_failed = ferror(cmd_file);
+    if (true == is_fread_failed) {
         status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_FREAD_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -165,6 +174,13 @@ enum zash_status scanner_get_command_line(int pid,
     /* Check if any command line read */
     if (0 == temp_command_line_len) {
         status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_LINE;
+        goto lbl_cleanup;
+    }
+
+    /* Check that the command line was not truncated */
+    if (temp_command_line_len == *command_line_len) {
+        status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_COMMAND_LINE_TOO_LONG;
+        DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
@@ -183,31 +199,33 @@ lbl_cleanup:
 }
 
 
-enum zash_status scanner_is_required(const char *command_name, bool *is_required)
+enum zash_status scanner_is_required(const char *command_path, bool *is_required)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     bool temp_is_required = false;
-    char *command_name_dup = NULL;
-    char *command_name_base = NULL;
+    char *command_path_dup = NULL;
+    char *command_name = NULL;
+    int strcmp_return_value = 0;
 
     /* Check for valid parameters */
     ASSERT(NULL != is_required);
-    ASSERT(NULL != command_name);
+    ASSERT(NULL != command_path);
 
     /* copy the command so we could use basename on it */
-    command_name_dup = strdup(command_name);
-    if (NULL == command_name_dup) {
+    command_path_dup = strdup(command_path);
+    if (NULL == command_path_dup) {
         status = ZASH_STATUS_SCANNER_IS_REQUIRED_STRDUP_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
     /* Get the name of the command, without it's full path */
-    command_name_base = basename(command_name_dup);
+    command_name = basename(command_path_dup);
 
     /* Check if the command is of a process we need to gather data about */
-    temp_is_required = (0 == strcmp(command_name_base, SCANNER_REQUIRED_COMMAND));
+    strcmp_return_value = strcmp(command_name, SCANNER_REQUIRED_COMMAND);
+    temp_is_required = (0 == strcmp_return_value);
 
     /* Transfer Ownership */
     *is_required = temp_is_required;
@@ -217,16 +235,53 @@ enum zash_status scanner_is_required(const char *command_name, bool *is_required
 
 lbl_cleanup:
 
-    HEAPFREE(command_name_dup);
+    HEAPFREE(command_path_dup);
 
     return status;
 }
 
 
-enum zash_status scanner_extract_data(int pid,
-                                      char *command_line,
-                                      size_t command_line_len,
-                                      struct SCANNER_data **data)
+enum zash_status scanner_get_command_id(pid_t pid, int *command_id)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    int temp_command_id = C_STANDARD_FAILURE_VALUE;
+
+    /* Check for valid parameters */
+    ASSERT(NULL != command_id);
+
+    /* get the niceness of the process - it is the command id */
+    errno = ERRNO_SUCCESS;
+    temp_command_id = getpriority(PRIO_PROCESS, pid);
+    if ((C_STANDARD_FAILURE_VALUE == temp_command_id) && ERRNO_SUCCESS != errno) {
+
+        if (ESRCH == errno) {
+            status = ZASH_STATUS_SCANNER_GET_COMMAND_ID_NO_PROCESS_EXIST;
+        }
+        else {
+            status = ZASH_STATUS_SCANNER_GET_COMMAND_ID_GETPRIORITY_FAILED;
+        }
+
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Transfer Ownership */
+    *command_id = temp_command_id;
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+}
+
+
+enum zash_status scanner_data_create(int command_id,
+                                     char *command_line,
+                                     size_t command_line_len,
+                                     struct SCANNER_data **data)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
@@ -242,19 +297,12 @@ enum zash_status scanner_extract_data(int pid,
     /* Allocate memory for new data */
     new_data = HEAPALLOCZ(sizeof(*new_data));
     if (NULL == new_data) {
-        status = ZASH_STATUS_SCANNER_EXTRACT_DATA_CALLOC_FAILED;
+        status = ZASH_STATUS_SCANNER_DATA_CREATE_CALLOC_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
-    /* get the niceness of the process - it is the command id */
-    errno = ERRNO_SUCCESS;
-    new_data->id = getpriority(PRIO_PROCESS, pid);
-    if ((C_STANDARD_FAILURE_VALUE == new_data->id) && ERRNO_SUCCESS != errno) {
-        status = ZASH_STATUS_SCANNER_EXTRACT_DATA_GETPRIORITY_FAILED;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
+    new_data->id = command_id;
 
     /* Create a new vector to contain the command's args */
     status = VECTOR_create(&new_data->argv);
@@ -265,7 +313,7 @@ enum zash_status scanner_extract_data(int pid,
 
     current_arg = command_line;
 
-    /* extract commands line argument from the command line into a vector */
+    /* rearrange commands line argument from the command line into a vector */
     while (command_line_len > 0) {
 
         /* dont parse the first argument in the command line - it is the command name */
@@ -274,7 +322,7 @@ enum zash_status scanner_extract_data(int pid,
             /* Copy the argument */
             current_arg_dup = strdup(current_arg);
             if (NULL == current_arg_dup) {
-                status = ZASH_STATUS_SCANNER_EXTRACT_DATA_STRDUP_FAILED;
+                status = ZASH_STATUS_SCANNER_DATA_CREATE_STRDUP_FAILED;
                 DEBUG_PRINT("status: %d", status);
                 goto lbl_cleanup;
             }
@@ -319,13 +367,16 @@ lbl_cleanup:
 }
 
 
-enum zash_status scanner_scan_by_pid(struct SCANNER_context *context, int pid)
+enum zash_status scanner_scan_data_from_process(struct SCANNER_context *context,
+                                                pid_t pid,
+                                                struct VECTOR_context *data)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     char command_line[SCANNER_MAX_COMMAND_LINE_LENGTH] = {0};
-    size_t command_line_len = 0;
+    size_t command_line_len = SCANNER_MAX_COMMAND_LINE_LENGTH;
     struct SCANNER_data *new_data = NULL;
+    int command_id = 0;
     bool is_scanned = false;
     bool is_required = false;
 
@@ -342,10 +393,7 @@ enum zash_status scanner_scan_by_pid(struct SCANNER_context *context, int pid)
     if (false == is_scanned) {
 
         /* Get the command line of the process. */
-        status = scanner_get_command_line(pid,
-                                          SCANNER_MAX_COMMAND_LINE_LENGTH,
-                                          command_line,
-                                          &command_line_len);
+        status = scanner_get_command_line(pid, &command_line_len, command_line);
         if (ZASH_STATUS_SUCCESS != status) {
             goto lbl_cleanup;
         }
@@ -360,15 +408,22 @@ enum zash_status scanner_scan_by_pid(struct SCANNER_context *context, int pid)
 
         if (true == is_required) {
 
-            /* Get the data of the process */
-            status = scanner_extract_data(pid, command_line, command_line_len, &new_data);
+            /* Get the id of the command scanned */
+            status = scanner_get_command_id(pid, &command_id);
+            if (ZASH_STATUS_SUCCESS != status) {
+                DEBUG_PRINT("status: %d", status);
+                goto lbl_cleanup;
+            }
+
+            /* create a scanner_data object */
+            status = scanner_data_create(command_id, command_line, command_line_len, &new_data);
             if (ZASH_STATUS_SUCCESS != status) {
                 DEBUG_PRINT("status: %d", status);
                 goto lbl_cleanup;
             }
 
             /* Add the data to the vector of data found */
-            status = VECTOR_push(context->data, new_data);
+            status = VECTOR_push(data, new_data);
             if (ZASH_STATUS_SUCCESS != status) {
                 DEBUG_PRINT("status: %d", status);
                 goto lbl_cleanup;
@@ -392,7 +447,9 @@ lbl_cleanup:
 }
 
 
-enum zash_status scanner_scan_file(const char *file, struct SCANNER_context *context)
+enum zash_status scanner_scan_data_from_file(const char *dir,
+                                             const char *file,
+                                             struct scanner_data_retriever *retriever)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -401,7 +458,9 @@ enum zash_status scanner_scan_file(const char *file, struct SCANNER_context *con
 
     /* Check for valid parameters */
     ASSERT(NULL != file);
-    ASSERT(NULL != context);
+    ASSERT(NULL != retriever);
+
+    UNREFERENCED_PARAMETER(dir);
 
     /* convert the name of the file to number */
     errno = ERRNO_SUCCESS;
@@ -415,12 +474,12 @@ enum zash_status scanner_scan_file(const char *file, struct SCANNER_context *con
     /* if the name of the file is a number - that number is a pid of a process. */
     if (endptr != file) {
         /* Scan the found process for data */
-        status = scanner_scan_by_pid(context, (int) strtoul_return_value);
+        status = scanner_scan_data_from_process(retriever->context,
+                                                (pid_t) strtoul_return_value,
+                                                retriever->data);
 
         /* If the data of the process want exist, we want to continue scanning for processes. */
-        if ((ZASH_STATUS_SUCCESS != status) &&
-            (ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_FILE != status) &&
-            (ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_LINE != status)) {
+        if (SCANNER_IS_FATAL_ERROR(status)) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
@@ -510,6 +569,8 @@ enum zash_status SCANNER_scan(struct SCANNER_context *context, struct VECTOR_con
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
+    struct scanner_data_retriever retriever = {0};
+
     /* Check for valid parameters */
     if ((NULL == context) || (NULL == data)) {
         status = ZASH_STATUS_SCANNER_SCAN_NULL_POINTER;
@@ -517,8 +578,10 @@ enum zash_status SCANNER_scan(struct SCANNER_context *context, struct VECTOR_con
         goto lbl_cleanup;
     }
 
+    retriever.context = context;
+
     /* Create vector for found data */
-    status = VECTOR_create(&context->data);
+    status = VECTOR_create(&retriever.data);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -526,24 +589,24 @@ enum zash_status SCANNER_scan(struct SCANNER_context *context, struct VECTOR_con
 
     /* Scan all processes by scanning the /proc directory, that contains all processes pids */
     status = UTILS_iter_dir(SCANNER_PROC_PATH,
-                            (UTILS_iter_dir_callback_t) scanner_scan_file,
-                            context);
+                            (UTILS_iter_dir_callback_t) scanner_scan_data_from_file,
+                            &retriever);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
     /* Transfer Ownership */
-    *data = context->data;
-    context->data = NULL;
+    *data = retriever.data;
+    retriever.data = NULL;
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
 
-    if (NULL != context->data) {
-        temp_status = VECTOR_destroy(context->data, (VECTOR_free_func_t) SCANNER_free_data);
+    if (NULL != retriever.data) {
+        temp_status = VECTOR_destroy(retriever.data, (VECTOR_free_func_t) SCANNER_free_data);
         if (ZASH_STATUS_SUCCESS != temp_status) {
             DEBUG_PRINT("status: %d", status);
             ZASH_UPDATE_STATUS(status, temp_status);
@@ -557,7 +620,7 @@ lbl_cleanup:
 enum zash_status SCANNER_destroy(struct SCANNER_context *context)
 {
 
-    enum zash_status status = ZASH_STATUS_SUCCESS;
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
     if (NULL != context) {
@@ -567,13 +630,11 @@ enum zash_status SCANNER_destroy(struct SCANNER_context *context)
             ZASH_UPDATE_STATUS(status, temp_status);
         }
 
-        if (NULL != context->data) {
-            temp_status = VECTOR_destroy(context->data, (VECTOR_free_func_t) SCANNER_free_data);
-            ZASH_UPDATE_STATUS(status, temp_status);
-        }
-
         HEAPFREE(context);
     }
+
+    /* If no error status was set, indicate success */
+    ZASH_UPDATE_STATUS(status, ZASH_STATUS_SUCCESS);
 
     return status;
 }

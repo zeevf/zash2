@@ -213,7 +213,7 @@ UTILS_iter_dir(const char *dir_path, UTILS_iter_dir_callback_t callback, void *a
         if ((false == is_current_dir) && (false == is_parent_dir)) {
 
             /* Run the callback on the file */
-            status = callback(entry.d_name, args);
+            status = callback(dir_path, entry.d_name, args);
             if (ZASH_STATUS_SUCCESS != status) {
                 DEBUG_PRINT("status: %d", status);
                 goto lbl_cleanup;

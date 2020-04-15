@@ -30,7 +30,7 @@
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status RUNNER_run(int command_id, int argc, char *const argv[]);
+enum zash_status RUNNER_run(int command_id, int argc, const char *const argv[]);
 
 
 #endif //ZASH_RUNNER_H

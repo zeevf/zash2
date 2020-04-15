@@ -12,15 +12,23 @@
 
 
 /** Constants *************************************************/
-/* The code to sent to the terminal for changing color */
-#define RUNNER_COLOR_COMMAND "\x1b[0;3%cm"
 /* The format to use for concat directory paths */
 #define RUNNER_DIR_FORMAT "%s/%s"
+/* The code to sent to the terminal for changing color */
+#define RUNNER_COLOR_COMMAND "\x1b[0;3%cm"
+/* The length in bytes of new color command */
+#define RUNNER_COLOR_COMMAND_LEN (8)
+/* The minimum valid value to pass as color. */
+#define RUNNER_MIN_VALID_COLOR ('0')
+/* The maximum valid value to pass as color. */
+#define RUNNER_MAX_VALID_COLOR ('7')
 
 
 /** Macros ****************************************************/
 /* Check if a character can represent a color. */
-#define RUNNER_IS_VALID_COLOR(color) (('0' > (color)) || ('7' < (color)))
+#define RUNNER_IS_VALID_COLOR(color) ((RUNNER_MIN_VALID_COLOR > (color)) || \
+                                      (RUNNER_MAX_VALID_COLOR < (color)))   \
+
 
 /** Enums *****************************************************/
 /** @brief the parameters of copy logs commands */
@@ -44,14 +52,18 @@ enum runner_change_color_parameter {
 /**
  * @brief copy a log from the log directory into a new directory.
  *
+ * @param [in]           log_dir               the path of the directory where the logs are.
+ *
  * @param [in]           log_file              the name of the log file to copy.
  *
  * @param [in]           dir                   the path of the directory to copy the log file into.
  *
  * @return               return value indicating an error may returned.
  *
+ * @note                 This function is a callback for UTILS_iter_dir
+ *
  */
-enum zash_status runner_copy_log(const char *log_file, const char *dir);
+enum zash_status runner_copy_log(const char *log_dir, const char *log_file, const char *dir);
 
 
 /**
@@ -65,7 +77,7 @@ enum zash_status runner_copy_log(const char *log_file, const char *dir);
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status runner_copy_logs(int argc, char *const argv[]);
+enum zash_status runner_copy_logs(int argc, const char *const argv[]);
 
 
 /**
@@ -79,7 +91,7 @@ enum zash_status runner_copy_logs(int argc, char *const argv[]);
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status runner_change_color(int argc, char *const argv[]);
+enum zash_status runner_change_color(int argc, const char *const argv[]);
 
 
 #endif //ZASH_RUNNER_INTERNAL_H

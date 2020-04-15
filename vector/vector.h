@@ -16,14 +16,7 @@
 
 /** Structs ***************************************************/
 /** @brief The context of vector object */
-struct VECTOR_context {
-    /* An array of pointer, contains the vector content. */
-    void **array;
-    /* The amount of objects in the array. */
-    size_t array_size;
-    /* The amount of objects that the array can contain. */
-    size_t array_max;
-};
+struct VECTOR_context;
 
 
 /** Typedefs *************************************************/
@@ -68,6 +61,10 @@ enum zash_status VECTOR_push(struct VECTOR_context *context, void *entry);
  *
  */
 enum zash_status VECTOR_pop(struct VECTOR_context *context, void **entry);
+
+//TODO: docu
+enum zash_status
+VECTOR_as_array(struct VECTOR_context *context, void const *const **array, size_t *array_length);
 
 
 /**

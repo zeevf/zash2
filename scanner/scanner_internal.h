@@ -23,14 +23,29 @@
 /* The maximum size of a command line to scan. */
 #define SCANNER_MAX_COMMAND_LINE_LENGTH (4096)
 
+
+/** Macros *************************************************/
+/* True is an status error is a fatal status and the scanning should stop. */
+#define SCANNER_IS_FATAL_ERROR(status) ((ZASH_STATUS_SUCCESS != (status)) &&  \
+(ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_FILE != (status)) &&         \
+(ZASH_STATUS_SCANNER_GET_COMMAND_ID_NO_PROCESS_EXIST != (status)) &&            \
+(ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_LINE != (status)))           \
+
 /** Structs **************************************************/
 /** @brief the context of a scanner object. */
 struct SCANNER_context {
     /* the pids already scanned  */
     struct VECTOR_context *scanned_pids;
+};
+
+/** @brief an object to scan with and return data found. */
+struct scanner_data_retriever {
+    /* the scanner to scan with */
+    struct SCANNER_context *context;
     /* the data found from scanning processes */
     struct VECTOR_context *data;
 };
+
 
 
 /** Functions *************************************************/
@@ -46,7 +61,8 @@ struct SCANNER_context {
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status scanner_is_scanned(int pid, struct VECTOR_context *scanned_pids, bool *is_scanned);
+enum zash_status
+scanner_is_scanned(pid_t pid, struct VECTOR_context *scanned_pids, bool *is_scanned);
 
 
 /**
@@ -67,40 +83,37 @@ enum zash_status scanner_mark_as_scanned(int pid, struct VECTOR_context *scanned
  *
  * @param [in]           pid                    the pid of the process to extract it's data.
  *
- * @param [in]           max_command_line       the maximum size in bytes that can be
- *                                              write into command_line parameter.
+ * @param [in, out]      command_line_len       the maximum length of a command line.
+ *                                              return the command line actual length.
  *
  * @param [out]          command_line           the command line used to run the process. this
  *                                              parameter has the same syntax as the file
  *                                              /proc/[pid]/cmdline - each parameter will be
  *                                              separated form the next by a null terminator.
  *
- * @param [out]          command_line_len       the length in bytes of the command_line parameter.
- *
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status scanner_get_command_line(int pid,
-                                          size_t max_command_line,
-                                          char *command_line,
-                                          size_t *command_line_len);
+enum zash_status scanner_get_command_line(int pid, size_t *command_line_len, char *command_line);
+
+
 /**
  * @brief Check if a process has the magic command that mean its data is required by the scanner.
  *
- * @param [in]           command_name           the command used to run the process.
+ * @param [in]           command_path           the command used to run the process.
  *
  * @param [out]          is_required            true if the process is required by the scanner.
  *
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status scanner_is_required(const char *command_name, bool *is_required);
+enum zash_status scanner_is_required(const char *command_path, bool *is_required);
 
 
 /**
  * @brief Get a SCANNER_data object contains all required data about a process.
  *
- * @param [in]           pid                    the pid of the process to extract it's data.
+ * @param [in]           command_id                    the pid of the process to extract it's data.
  *
  * @param [in]           command_line           the command line used to run the process. this
  *                                              parameter has the same syntax as the file
@@ -114,10 +127,10 @@ enum zash_status scanner_is_required(const char *command_name, bool *is_required
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status scanner_extract_data(int pid,
-                                      char *command_line,
-                                      size_t command_line_len,
-                                      struct SCANNER_data **data);
+enum zash_status scanner_data_create(int command_id,
+                                     char *command_line,
+                                     size_t command_line_len,
+                                     struct SCANNER_data **data);
 
 
 /**
@@ -127,23 +140,34 @@ enum zash_status scanner_extract_data(int pid,
  *
  * @param [in]           pid                    the pid of the process to scan from.
  *
+ * @param [out]          data                   the vector to add data found into.
+ *
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status scanner_scan_by_pid(struct SCANNER_context *context, int pid);
+enum zash_status scanner_scan_data_from_process(struct SCANNER_context *context,
+                                                pid_t pid,
+                                                struct VECTOR_context *data);
 
 
 /**
  * @brief Scan for commands from a file in /proc directory.
  *
- * @param [in]           file                   the name of the file.
+ * @param [in]           dir                   unused.
  *
- * @param [in]           context                the scanner to scan me.
+ * @param [in]           file                  the name of the file.
+ *
+ * @param [in]           retriever             the data retriever, contains the scanner to scan with
+ *                                             and the data vector to add data found into.
  *
  * @return               return value indicating an error may returned.
  *
+ * @note                 This function is a callback for UTILS_iter_dir.
+ *
  */
-enum zash_status scanner_scan_file(const char *file, struct SCANNER_context *context);
+enum zash_status scanner_scan_data_from_file(const char *dir,
+                                             const char *file,
+                                             struct scanner_data_retriever *retriever);
 
 
 #endif //ZASH_SCANNER_INTERNAL_H

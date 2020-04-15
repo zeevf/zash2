@@ -17,7 +17,7 @@
 
 
 /** Functions ***********************************************/
-enum zash_status runner_copy_log(const char *log_file, const char *dir)
+enum zash_status runner_copy_log(const char *log_dir, const char *log_file, const char *dir)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -39,10 +39,24 @@ enum zash_status runner_copy_log(const char *log_file, const char *dir)
         goto lbl_cleanup;
     }
 
+    /* Check that the new path want too long */
+    if (return_value >= PATH_MAX) {
+        status = ZASH_STATUS_RUNNER_COPY_LOG_NEW_PATH_TOO_LONG;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
     /* Assemble path of the file to copy into */
-    return_value = snprintf(log_path, PATH_MAX, RUNNER_DIR_FORMAT, ZASH_LOGS_PATH, log_file);
+    return_value = snprintf(log_path, PATH_MAX, RUNNER_DIR_FORMAT, log_dir, log_file);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_RUNNER_COPY_LOG_SNPRINTF_LOG_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Check that the log path want too long */
+    if (return_value >= PATH_MAX) {
+        status = ZASH_STATUS_RUNNER_COPY_LOG_LOG_PATH_TOO_LONG;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
@@ -72,7 +86,7 @@ lbl_cleanup:
 }
 
 
-enum zash_status runner_copy_logs(int argc, char *const argv[])
+enum zash_status runner_copy_logs(int argc, const char *const argv[])
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -97,7 +111,7 @@ enum zash_status runner_copy_logs(int argc, char *const argv[])
     /* For each log file in the logs file directory, copy it into the new directory. */
     status = UTILS_iter_dir(ZASH_LOGS_PATH,
                             (UTILS_iter_dir_callback_t) runner_copy_log,
-                            argv[RUNNER_COPY_LOGS_PARAMETER_DESTINATION_DIR]);
+                            (void *) argv[RUNNER_COPY_LOGS_PARAMETER_DESTINATION_DIR]);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -113,14 +127,14 @@ lbl_cleanup:
 }
 
 
-enum zash_status runner_change_color(int argc, char *const argv[])
+enum zash_status runner_change_color(int argc, const char *const argv[])
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     char color = 0;
-    char command_to_print[sizeof(RUNNER_COLOR_COMMAND)] = {0};
-    size_t write_len = 0;
+    const char *color_parameter = NULL;
+    char command_to_print[RUNNER_COLOR_COMMAND_LEN] = {0};
     ssize_t write_return_value = C_STANDARD_FAILURE_VALUE;
     int snprintf_return_value = C_STANDARD_FAILURE_VALUE;
 
@@ -134,8 +148,11 @@ enum zash_status runner_change_color(int argc, char *const argv[])
         goto lbl_cleanup;
     }
 
+    /* get the new color parameter */
+    color_parameter = argv[RUNNER_CHANGE_COLOR_PARAMETER_NEW_COLOR];
+
     /* get the first character of the parameter */
-    color = *argv[RUNNER_CHANGE_COLOR_PARAMETER_NEW_COLOR];
+    color = *color_parameter;
 
     /* Check if the character represents a color */
     if (RUNNER_IS_VALID_COLOR(color)) {
@@ -146,7 +163,7 @@ enum zash_status runner_change_color(int argc, char *const argv[])
 
     /* Assemble Terminal command for changing color */
     snprintf_return_value = snprintf(command_to_print,
-                                     sizeof(command_to_print),
+                                     RUNNER_COLOR_COMMAND_LEN,
                                      RUNNER_COLOR_COMMAND,
                                      color);
     if (C_STANDARD_FAILURE_VALUE == snprintf_return_value) {
@@ -155,12 +172,16 @@ enum zash_status runner_change_color(int argc, char *const argv[])
         goto lbl_cleanup;
     }
 
+    /* Check that the command was not truncated */
+    if (snprintf_return_value >= RUNNER_COLOR_COMMAND_LEN) {
+        status = ZASH_STATUS_RUNNER_CHANGE_COLOR_COMMAND_TRUNCATED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
     /* Write the command to change the color */
-    write_len = strlen(command_to_print);
-    write_return_value = write(STDOUT_FILENO,
-                               command_to_print,
-                               write_len);
-    if (write_return_value < write_len) {
+    write_return_value = write(STDOUT_FILENO, command_to_print, snprintf_return_value);
+    if (write_return_value < snprintf_return_value) {
         status = ZASH_STATUS_RUNNER_CHANGE_COLOR_WRITE_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -176,10 +197,17 @@ lbl_cleanup:
 }
 
 
-enum zash_status RUNNER_run(int command_id, int argc, char *const argv[])
+enum zash_status RUNNER_run(int command_id, int argc, const char *const argv[])
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    /* Check for valid parameters */
+    if (NULL == argv) {
+        status = ZASH_STATUS_RUNNER_RUN_NULL_POINTER;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
 
     /* Run the command. */
     switch (command_id) {
@@ -205,8 +233,11 @@ enum zash_status RUNNER_run(int command_id, int argc, char *const argv[])
         break;
 
     default:
+
         /* No command was given */
-        break;
+        status = ZASH_STATUS_RUNNER_RUN_NO_COMMANDS;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
     }
 
     /* Indicate Success */

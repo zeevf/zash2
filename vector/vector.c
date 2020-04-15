@@ -73,7 +73,7 @@ enum zash_status VECTOR_push(struct VECTOR_context *context, void *entry)
     if (context->array_size >= context->array_max) {
 
         /* Increase maximum array size */
-        context->array_max += VECTOR_BLOCK_SIZE;
+        context->array_max += VECTOR_ALLOCATING_BLOCK_SIZE;
 
         /* Realloc the memory for the vector */
         realloc_return_value = realloc(context->array,
@@ -138,10 +138,37 @@ lbl_cleanup:
 }
 
 
+enum zash_status
+VECTOR_as_array(struct VECTOR_context *context, void const *const **array, size_t *array_length)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    void *temp_entry = NULL;
+
+    /* Check for valid parameters */
+    if ((NULL == context) || (NULL == array) || (NULL == array_length)) {
+        status = ZASH_STATUS_VECTOR_AS_ARRAY_NULL_POINTER;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Transfer Ownership */
+    *array = (void const *const *) context->array;
+    *array_length = context->array_size;
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+}
+
+
 enum zash_status VECTOR_destroy(struct VECTOR_context *context, VECTOR_free_func_t free_func)
 {
 
-    enum zash_status status = ZASH_STATUS_SUCCESS;
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
     size_t i = 0;
@@ -165,6 +192,9 @@ enum zash_status VECTOR_destroy(struct VECTOR_context *context, VECTOR_free_func
         HEAPFREE(context->array);
     }
     HEAPFREE(context);
+
+    /* If no error status was set, indicate success */
+    ZASH_UPDATE_STATUS(status, ZASH_STATUS_SUCCESS);
 
     return status;
 }

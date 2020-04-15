@@ -35,6 +35,7 @@
 
 #define HEAPALLOCZ(size) calloc(1, size)
 #define ZERO_MEMORY(pointer, size) (void)memset(pointer, 0, size)
+#define UNREFERENCED_PARAMETER(param) ((param) = (param))
 #define IS_CURRENT_DIR(file) (0 == strncmp(file, ".", sizeof(".")));
 #define IS_PARENT_DIR(file) (0 == strncmp(file, "..", sizeof(".")));
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))

