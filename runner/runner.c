@@ -197,7 +197,7 @@ lbl_cleanup:
 }
 
 
-enum zash_status RUNNER_run(int command_id, int argc, const char *const argv[])
+enum zash_status RUNNER_run(enum RUNNER_command_id command_id, int argc, const char *const *argv)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -212,7 +212,7 @@ enum zash_status RUNNER_run(int command_id, int argc, const char *const argv[])
     /* Run the command. */
     switch (command_id) {
 
-    case RUNNER_CHANGE_COLOR_ID:
+    case RUNNER_CHANGE_COLOR_COMMAND_ID:
         /* Change the color of the terminal. */
         status = runner_change_color(argc, argv);
         if (ZASH_STATUS_SUCCESS != status) {
@@ -222,7 +222,7 @@ enum zash_status RUNNER_run(int command_id, int argc, const char *const argv[])
 
         break;
 
-    case RUNNER_COPY_LOGS_ID:
+    case RUNNER_COPY_LOGS_COMMAND_ID:
         /* Copy the log files into a new directory. */
         status = runner_copy_logs(argc, argv);
         if (ZASH_STATUS_SUCCESS != status) {
