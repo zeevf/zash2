@@ -26,7 +26,7 @@ struct BACKDOOR_context;
  * @note                 must be freed using BACKDOOR_destroy.
  *
  */
-enum zash_status BACKDOOR_create(struct BACKDOOR_context **context);
+enum zash_status BACKDOOR_create(pthread_rwlock_t *lock, struct BACKDOOR_context **context);
 
 
 /**

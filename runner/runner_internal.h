@@ -77,7 +77,7 @@ enum zash_status runner_copy_log(const char *log_dir, const char *log_file, cons
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status runner_copy_logs(int argc, const char *const argv[]);
+enum zash_status runner_copy_logs(int argc, const char *const argv[], pthread_rwlock_t *lock);
 
 
 /**

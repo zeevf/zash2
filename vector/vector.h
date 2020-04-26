@@ -40,7 +40,7 @@ enum zash_status VECTOR_create(struct VECTOR_context **context);
 /**
  * @brief Push a pointer into the vector
  *
- * @param [out]          context                the Vector to push the pointer into
+ * @param [in]           context                the Vector to push the pointer into
  *
  * @param [out]          entry                  the pointer to push.
  *
@@ -50,21 +50,23 @@ enum zash_status VECTOR_create(struct VECTOR_context **context);
 enum zash_status VECTOR_push(struct VECTOR_context *context, void *entry);
 
 
+
 /**
- * @brief Remove the latest pointer added to a vector and get it.
+ * @brief Get access to the vectors context as an array.
  *
- * @param [out]          context                the Vector to pop from
+ * @param [out]          context                the Vector get it's content.
  *
- * @param [out]          entry                  the pointer popped.
+ * @param [out]          array                  the content of the vector as an array.
+ *
+ * @param [out]          array_length           the length of the array returned.
  *
  * @return               return value indicating an error may returned.
  *
+ * @note                 you must free the returned array. changing the vector would not change the
+ *                       array.
  */
-enum zash_status VECTOR_pop(struct VECTOR_context *context, void **entry);
-
-//TODO: docu
 enum zash_status
-VECTOR_as_array(struct VECTOR_context *context, void const *const **array, size_t *array_length);
+VECTOR_as_array(struct VECTOR_context *context, void ***array, size_t *array_length);
 
 
 /**

@@ -29,15 +29,16 @@ scanner_is_scanned(pid_t pid, struct VECTOR_context *scanned_pids, bool *is_scan
 
     const pid_t *current_pid = NULL;
     bool temp_is_scanned = false;
-    const pid_t *const *scanned_array = NULL;
+    pid_t **scanned_array = NULL;
     size_t scanned_size = 0;
     size_t i = 0;
 
     /* Check for valid parameters */
     ASSERT(NULL != scanned_pids);
     ASSERT(NULL != is_scanned);
-    //TODO: docu
-    status = VECTOR_as_array(scanned_pids, (const void *const **) &scanned_array, &scanned_size);
+
+    /* Get the scanned pids as an array */
+    status = VECTOR_as_array(scanned_pids, (void ***)&scanned_array, &scanned_size);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -61,6 +62,8 @@ scanner_is_scanned(pid_t pid, struct VECTOR_context *scanned_pids, bool *is_scan
     status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
+
+    HEAPFREE(scanned_array);
 
     return status;
 
@@ -153,8 +156,7 @@ enum zash_status scanner_get_command_line(pid_t pid, size_t *command_line_len, c
          * no longer exist. this is a different error */
         if (ENOENT == errno) {
             status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_NO_COMMAND_FILE;
-        }
-        else {
+        } else {
             status = ZASH_STATUS_SCANNER_GET_COMMAND_LINE_FOPEN_FAILED;
             DEBUG_PRINT("status: %d", status);
         }
@@ -257,8 +259,7 @@ enum zash_status scanner_get_command_id(pid_t pid, int *command_id)
 
         if (ESRCH == errno) {
             status = ZASH_STATUS_SCANNER_GET_COMMAND_ID_NO_PROCESS_EXIST;
-        }
-        else {
+        } else {
             status = ZASH_STATUS_SCANNER_GET_COMMAND_ID_GETPRIORITY_FAILED;
         }
 
@@ -335,8 +336,7 @@ enum zash_status scanner_data_create(int command_id,
             }
 
             current_arg_dup = NULL;
-        }
-        else {
+        } else {
             /* The next argument is not first */
             is_first_arg = false;
         }
@@ -474,9 +474,8 @@ enum zash_status scanner_scan_data_from_file(const char *dir,
     /* if the name of the file is a number - that number is a pid of a process. */
     if (endptr != file) {
         /* Scan the found process for data */
-        status = scanner_scan_data_from_process(retriever->context,
-                                                (pid_t) strtoul_return_value,
-                                                retriever->data);
+        status = scanner_scan_data_from_process(
+                retriever->context, (pid_t)strtoul_return_value, retriever->data);
 
         /* If the data of the process want exist, we want to continue scanning for processes. */
         if (SCANNER_IS_FATAL_ERROR(status)) {
@@ -588,9 +587,8 @@ enum zash_status SCANNER_scan(struct SCANNER_context *context, struct VECTOR_con
     }
 
     /* Scan all processes by scanning the /proc directory, that contains all processes pids */
-    status = UTILS_iter_dir(SCANNER_PROC_PATH,
-                            (UTILS_iter_dir_callback_t) scanner_scan_data_from_file,
-                            &retriever);
+    status = UTILS_iter_dir(
+            SCANNER_PROC_PATH, (UTILS_iter_dir_callback_t)scanner_scan_data_from_file, &retriever);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -606,7 +604,7 @@ enum zash_status SCANNER_scan(struct SCANNER_context *context, struct VECTOR_con
 lbl_cleanup:
 
     if (NULL != retriever.data) {
-        temp_status = VECTOR_destroy(retriever.data, (VECTOR_free_func_t) SCANNER_free_data);
+        temp_status = VECTOR_destroy(retriever.data, (VECTOR_free_func_t)SCANNER_free_data);
         if (ZASH_STATUS_SUCCESS != temp_status) {
             DEBUG_PRINT("status: %d", status);
             ZASH_UPDATE_STATUS(status, temp_status);

@@ -8,6 +8,8 @@
 #define ZASH_RUNNER_H
 
 /** Headers ***************************************************/
+#include <pthread.h>
+
 #include "zash_status.h"
 
 /** Enums *****************************************************/
@@ -31,7 +33,10 @@ enum RUNNER_command_id {
  * @return               return value indicating an error may returned.
  *
  */
-enum zash_status RUNNER_run(enum RUNNER_command_id command_id, int argc, const char *const *argv);
+enum zash_status RUNNER_run(enum RUNNER_command_id command_id,
+                            int argc,
+                            const char *const *argv,
+                            pthread_rwlock_t *lock);
 
 
 #endif //ZASH_RUNNER_H

@@ -76,8 +76,8 @@ enum zash_status VECTOR_push(struct VECTOR_context *context, void *entry)
         context->array_max += VECTOR_ALLOCATING_BLOCK_SIZE;
 
         /* Realloc the memory for the vector */
-        realloc_return_value = realloc(context->array,
-                                       context->array_max * sizeof(*realloc_return_value));
+        realloc_return_value = realloc(
+                context->array, context->array_max * sizeof(*realloc_return_value));
         if (NULL == realloc_return_value) {
             status = ZASH_STATUS_VECTOR_PUSH_REALLOC_FAILED;
             DEBUG_PRINT("status: %d", status);
@@ -100,50 +100,13 @@ lbl_cleanup:
 }
 
 
-enum zash_status VECTOR_pop(struct VECTOR_context *context, void **entry)
-{
-
-    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
-
-    void *temp_entry = NULL;
-
-    /* Check for valid parameters */
-    if ((NULL == context) || (NULL == entry)) {
-        status = ZASH_STATUS_VECTOR_POP_NULL_POINTER;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
-
-    /* Check if the Vector contains any data to pop */
-    if (0 >= context->array_size) {
-        status = ZASH_STATUS_VECTOR_POP_EMPTY_VECTOR;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
-
-    /* Get the latest object form the vector and remove it */
-    context->array_size--;
-    temp_entry = context->array[context->array_size];
-    context->array[context->array_size] = NULL;
-
-    /* Transfer Ownership */
-    *entry = temp_entry;
-
-    /* Indicate Success */
-    status = ZASH_STATUS_SUCCESS;
-
-lbl_cleanup:
-
-    return status;
-}
-
-
 enum zash_status
-VECTOR_as_array(struct VECTOR_context *context, void const *const **array, size_t *array_length)
+VECTOR_as_array(struct VECTOR_context *context, void ***array, size_t *array_length)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
-    void *temp_entry = NULL;
+    void **temp_array = NULL;
+    size_t i = 0;
 
     /* Check for valid parameters */
     if ((NULL == context) || (NULL == array) || (NULL == array_length)) {
@@ -152,14 +115,30 @@ VECTOR_as_array(struct VECTOR_context *context, void const *const **array, size_
         goto lbl_cleanup;
     }
 
+    /* Allocate memory for new array */
+    temp_array = HEAPALLOCZ(sizeof(*temp_array) * context->array_size);
+    if (NULL == temp_array) {
+        status = ZASH_STATUS_VECTOR_AS_ARRAY_CALLOC_FAILED;
+        DEBUG_PRINT("status: %d, length: %zi", status, context->array_size);
+        goto lbl_cleanup;
+    }
+
+    /* Copy vector content into the new array */
+    for (i = 0; i < context->array_size; ++i) {
+        temp_array[i] = context->array[i];
+    }
+
     /* Transfer Ownership */
-    *array = (void const *const *) context->array;
     *array_length = context->array_size;
+    *array = temp_array;
+    temp_array = NULL;
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
+
+    HEAPFREE(temp_array);
 
     return status;
 }

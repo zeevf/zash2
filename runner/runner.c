@@ -6,7 +6,7 @@
 
 /** Headers ***************************************************/
 #include <unistd.h>
-#include <pthread.h>
+#include <stdbool.h>
 
 #include "utils/utils.h"
 #include "common.h"
@@ -24,7 +24,6 @@ enum zash_status runner_copy_log(const char *log_dir, const char *log_file, cons
 
     char new_path[PATH_MAX] = {0};
     char log_path[PATH_MAX] = {0};
-    pthread_rwlock_t lock = PTHREAD_RWLOCK_INITIALIZER;
     int return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
@@ -61,14 +60,6 @@ enum zash_status runner_copy_log(const char *log_dir, const char *log_file, cons
         goto lbl_cleanup;
     }
 
-    /* Acquire lock for reading logs */
-    return_value = pthread_rwlock_rdlock(&lock);
-    if (C_STANDARD_FAILURE_VALUE == return_value) {
-        status = ZASH_STATUS_RUNNER_COPY_LOG_PTHREAD_RWLOCK_RDLOCK_FAILED;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
-
     /* Copy the log file */
     status = UTILS_copy_file(log_path, new_path);
     if (ZASH_STATUS_SUCCESS != status) {
@@ -86,10 +77,14 @@ lbl_cleanup:
 }
 
 
-enum zash_status runner_copy_logs(int argc, const char *const argv[])
+enum zash_status runner_copy_logs(int argc, const char *const argv[], pthread_rwlock_t *lock)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+    enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
+
+    int return_value = C_STANDARD_FAILURE_VALUE;
+    bool is_lock_Acquired = false;
 
     /* Check for valid parameters */
     ASSERT(NULL != argv);
@@ -108,10 +103,20 @@ enum zash_status runner_copy_logs(int argc, const char *const argv[])
         goto lbl_cleanup;
     }
 
+    /* Acquire lock for reading logs */
+    return_value = pthread_rwlock_rdlock(lock);
+    if (C_STANDARD_SUCCESS_VALUE != return_value) {
+        status = ZASH_STATUS_RUNNER_COPY_LOGS_PTHREAD_RWLOCK_RDLOCK_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+    is_lock_Acquired = true;
+
     /* For each log file in the logs file directory, copy it into the new directory. */
-    status = UTILS_iter_dir(ZASH_LOGS_PATH,
-                            (UTILS_iter_dir_callback_t) runner_copy_log,
-                            (void *) argv[RUNNER_COPY_LOGS_PARAMETER_DESTINATION_DIR]);
+    status = UTILS_iter_dir(
+            ZASH_LOGS_PATH,
+            (UTILS_iter_dir_callback_t)runner_copy_log,
+            (void *)argv[RUNNER_COPY_LOGS_PARAMETER_DESTINATION_DIR]);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -121,6 +126,14 @@ enum zash_status runner_copy_logs(int argc, const char *const argv[])
     status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
+
+    if (is_lock_Acquired) {
+        return_value = pthread_rwlock_unlock(lock);
+        if (C_STANDARD_SUCCESS_VALUE != return_value) {
+            temp_status = ZASH_STATUS_RUNNER_COPY_LOGS_PTHREAD_RWLOCK_UNLOCK_FAILED;
+            ZASH_UPDATE_STATUS(status, temp_status);
+        }
+    }
 
     return status;
 
@@ -162,10 +175,8 @@ enum zash_status runner_change_color(int argc, const char *const argv[])
     }
 
     /* Assemble Terminal command for changing color */
-    snprintf_return_value = snprintf(command_to_print,
-                                     RUNNER_COLOR_COMMAND_LEN,
-                                     RUNNER_COLOR_COMMAND,
-                                     color);
+    snprintf_return_value = snprintf(
+            command_to_print, RUNNER_COLOR_COMMAND_LEN, RUNNER_COLOR_COMMAND, color);
     if (C_STANDARD_FAILURE_VALUE == snprintf_return_value) {
         status = ZASH_STATUS_RUNNER_CHANGE_COLOR_SNPRINTF_FAILED;
         DEBUG_PRINT("status: %d", status);
@@ -197,7 +208,8 @@ lbl_cleanup:
 }
 
 
-enum zash_status RUNNER_run(enum RUNNER_command_id command_id, int argc, const char *const *argv)
+enum zash_status
+RUNNER_run(enum RUNNER_command_id command_id, int argc, const char *const *argv, pthread_rwlock_t *lock)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -224,7 +236,7 @@ enum zash_status RUNNER_run(enum RUNNER_command_id command_id, int argc, const c
 
     case RUNNER_COPY_LOGS_COMMAND_ID:
         /* Copy the log files into a new directory. */
-        status = runner_copy_logs(argc, argv);
+        status = runner_copy_logs(argc, argv, lock);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;

