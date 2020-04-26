@@ -127,6 +127,7 @@ enum zash_status runner_copy_logs(int argc, const char *const argv[], pthread_rw
 
 lbl_cleanup:
 
+    /* Unlock the lock if acquired */
     if (is_lock_Acquired) {
         return_value = pthread_rwlock_unlock(lock);
         if (C_STANDARD_SUCCESS_VALUE != return_value) {
@@ -208,8 +209,10 @@ lbl_cleanup:
 }
 
 
-enum zash_status
-RUNNER_run(enum RUNNER_command_id command_id, int argc, const char *const *argv, pthread_rwlock_t *lock)
+enum zash_status RUNNER_run(enum RUNNER_command_id command_id,
+                            int argc,
+                            const char *const *argv,
+                            pthread_rwlock_t *lock)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;

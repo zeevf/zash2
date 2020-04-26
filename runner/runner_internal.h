@@ -74,6 +74,8 @@ enum zash_status runner_copy_log(const char *log_dir, const char *log_file, cons
  * @param [in]           argv                  the arguments for the command. should contain
  *                                             the path of the new directory.
  *
+ * @param [in]           lock                  The lock to use for synchronize log files reading.
+ *
  * @return               return value indicating an error may returned.
  *
  */

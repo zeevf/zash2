@@ -35,9 +35,11 @@ typedef void *(*backdoor_pthread_func_t)(void *);
 /**
  * @brief Run each command in an array.
  *
- * @param [in]           commands                   commands information to run.
+ * @param [in]           commands                 commands information to run.
  *
- * @param [in]           commands_amount            the amount of commands to run.
+ * @param [in]           commands_amount          the amount of commands to run.
+ *
+ * @param [in]           lock                     The lock to use for synchronize log files reading.
  *
  * @return               return value indicating an error may returned.
  *

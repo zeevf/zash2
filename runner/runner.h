@@ -30,6 +30,8 @@ enum RUNNER_command_id {
  *
  * @param [in]           argv                   arguments to set to the command.
  *
+ * @param [in]           lock                   The lock to use for synchronize log files reading.
+ *
  * @return               return value indicating an error may returned.
  *
  */
