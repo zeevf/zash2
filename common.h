@@ -54,8 +54,11 @@
 #define PATH_MAX (8192)
 #endif
 #define NULL_TERMINATOR ('\0')
+#define INVALID_PROCESS_ID (-1)
+#define CHILD_PROCESS (0)
 #define INVALID_FILE_DESCRIPTOR (-1)
 #define FOPEN_READ_ONLY "r"
 #define DECIMAL_BASE (10)
+#define ROOT_DIRECTORY "/"
 
 #endif //ZASH_COMMON_H
