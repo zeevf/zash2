@@ -60,5 +60,6 @@
 #define FOPEN_READ_ONLY "r"
 #define DECIMAL_BASE (10)
 #define ROOT_DIRECTORY "/"
+#define ARRAY_LEN(array) (sizeof(array) / sizeof(*(array)))
 
 #endif //ZASH_COMMON_H
