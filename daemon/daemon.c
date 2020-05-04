@@ -92,11 +92,7 @@ enum zash_status daemon_open_standard_files(char *path)
     int fd = INVALID_FILE_DESCRIPTOR;
 
     /* Check for valid parameters */
-    if (NULL == path) {
-        status = ZASH_STATUS_DAEMON_OPEN_STANDARD_FILES_NULL_POINTER;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
+    ASSERT(NULL != path);
 
     /* Open the null file */
     null_fd = open(path, O_RDWR);

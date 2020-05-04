@@ -22,8 +22,6 @@
 #define SOCKET_IP_SIZE (5)
 /* The value of a turned on flag */
 #define SOCKET_FLAG_ON (1)
-/* The maximum of connections to listen into */
-#define SOCKET_LISTEN_MAX_CONNECTIONS (1)
 
 struct SOCKET_syn_context {
     int raw_socket;
@@ -49,11 +47,7 @@ enum zash_status socket_bind_interface(int socket_fd, const char *interface)
     int return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
-    if (NULL == interface) {
-        status = ZASH_STATUS_SOCKET_BIND_INTERFACE_NULL_POINTER;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
+    ASSERT(NULL != interface);
 
     /* Get the length of the interface name */
     interface_len = strlen(interface) + 1;
@@ -85,11 +79,7 @@ enum zash_status socket_get_tcp_syn_header(uint16_t port, struct tcphdr *header)
     int return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
-    if (NULL == header) {
-        status = ZASH_STATUS_SOCKET_GET_TCP_SYN_HEADER_NULL_POINTER;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
+    ASSERT (NULL != header);
 
     /* convert port to network byte order */
     network_port = htons(port);
@@ -121,11 +111,7 @@ enum zash_status socket_get_address(uint16_t port, const char *ip, struct sockad
     int return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
-    if (NULL == address) {
-        status = ZASH_STATUS_SOCKET_GET_ADDRESS_NULL_POINTER;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
+    ASSERT(NULL != address);
 
     if (NULL != ip) {
         /* convert ip to binary form */
@@ -169,11 +155,8 @@ socket_get_syn_filter(int16_t port, struct sock_filter **filter_instructions, si
     size_t i = 0;
 
     /* Check for valid parameters */
-    if ((NULL == filter_instructions) || (NULL == filter_length)) {
-        status = ZASH_STATUS_SOCKET_GET_SYN_FILTER_NULL_POINTER;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
+    ASSERT(NULL != filter_instructions);
+    ASSERT(NULL == filter_length);
 
     /* Allocate memory for filter instructions */
     temp_filter = HEAPALLOCZ(sizeof(*temp_filter) * ARRAY_LEN(global_filter_instructions));
@@ -477,7 +460,8 @@ enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context)
 }
 
 
-enum zash_status SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd)
+enum zash_status
+SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd, int max_connections)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -525,7 +509,7 @@ enum zash_status SOCKET_tcp_server(const char *interface, uint16_t port, int *so
     }
 
     /* Listen for connection */
-    return_value = listen(server_socket, SOCKET_LISTEN_MAX_CONNECTIONS);
+    return_value = listen(server_socket, max_connections);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SOCKET_TCP_SERVER_LISTEN_FAILED;
         DEBUG_PRINT("status: %d", status);
@@ -597,7 +581,7 @@ SOCKET_tcp_client(const char *interface, const char *ip, uint16_t port, int *soc
 
     /* connect to the destination */
     errno = 0;
-    return_value = connect(temp_socket, (const struct sockaddr *)&address, sizeof(address));
+    return_value = connect(temp_socket, (const struct sockaddr *)&address, sizeof(address)); //TODO: loop in new function
     while ((C_STANDARD_FAILURE_VALUE) == return_value && (ECONNREFUSED == errno)) {
         /* Continue to try to connect until the server will listen for connections */
         errno = 0;
