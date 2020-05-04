@@ -25,10 +25,10 @@ enum zash_status SOCKET_syn_send(struct SOCKET_syn_context *context,
 
 
 enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
-                                    uint16_t listen_port,
+                                    uint16_t port,
                                     size_t *data_len,
                                     uint8_t *data,
-                                    char *src_ip
+                                    char *ip
 );
 
 enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context);
