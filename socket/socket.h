@@ -33,4 +33,10 @@ enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
 
 enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context);
 
+enum zash_status SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd);
+
+enum zash_status
+SOCKET_tcp_client(const char *interface, const char *ip, uint16_t port, int *socket_fd);
+
+
 #endif //ZASH_SOCKET_H
