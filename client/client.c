@@ -203,3 +203,8 @@ lbl_cleanup:
 
     return status;
 }
+
+//TODO: remove main
+void main(int argc, char *argv[]) {
+    CLIENT_run(argv[1], argv[2], 2020, 5780);
+}

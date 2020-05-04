@@ -22,6 +22,8 @@
 #define SOCKET_IP_SIZE (5)
 /* The value of a turned on flag */
 #define SOCKET_FLAG_ON (1)
+/* The maximum of connections to listen into */
+#define SOCKET_LISTEN_MAX_CONNECTIONS (1)
 
 struct SOCKET_syn_context {
     int raw_socket;
@@ -156,7 +158,7 @@ socket_get_syn_filter(int16_t port, struct sock_filter **filter_instructions, si
 
     /* Check for valid parameters */
     ASSERT(NULL != filter_instructions);
-    ASSERT(NULL == filter_length);
+    ASSERT(NULL != filter_length);
 
     /* Allocate memory for filter instructions */
     temp_filter = HEAPALLOCZ(sizeof(*temp_filter) * ARRAY_LEN(global_filter_instructions));
@@ -461,7 +463,7 @@ enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context)
 
 
 enum zash_status
-SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd, int max_connections)
+SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -509,7 +511,7 @@ SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd, int max_
     }
 
     /* Listen for connection */
-    return_value = listen(server_socket, max_connections);
+    return_value = listen(server_socket, SOCKET_LISTEN_MAX_CONNECTIONS);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SOCKET_TCP_SERVER_LISTEN_FAILED;
         DEBUG_PRINT("status: %d", status);
