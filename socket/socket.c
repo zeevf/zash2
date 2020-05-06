@@ -381,6 +381,36 @@ lbl_cleanup:
 }
 
 
+enum zash_status socket_tcp_connect(int fd_socket, struct sockaddr_in address)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    int return_value = C_STANDARD_FAILURE_VALUE;
+
+    /* Try to connect to the given address */
+    errno = 0;
+    return_value = connect(fd_socket, (const struct sockaddr *)&address, sizeof(address));
+    while ((C_STANDARD_FAILURE_VALUE) == return_value && (ECONNREFUSED == errno)) {
+        /* Continue to try to connect until the server will listen for connections */
+        errno = 0;
+        return_value = connect(fd_socket, (const struct sockaddr *)&address, sizeof(address));
+    }
+    if (C_STANDARD_FAILURE_VALUE == return_value) {
+        status = ZASH_STATUS_SOCKET_TCP_CONNECT_CONNECT_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+
+}
+
+
 enum zash_status SOCKET_syn_create(const char *interface, struct SOCKET_syn_context **context)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -485,7 +515,12 @@ enum zash_status SOCKET_syn_send(struct SOCKET_syn_context *context,
     }
 
     /* Get the tcp header of the syn packet */
-    status = socket_get_tcp_syn_header(context->source_ip, address.sin_addr.s_addr, port, data, data_len, &header);
+    status = socket_get_tcp_syn_header(context->source_ip,
+                                       address.sin_addr.s_addr,
+                                       port,
+                                       data,
+                                       data_len,
+                                       &header);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -743,18 +778,8 @@ SOCKET_tcp_client(const char *interface, const char *ip, uint16_t port, int *soc
     }
 
     /* connect to the destination */
-    errno = 0;
-    return_value = connect(temp_socket,
-                           (const struct sockaddr *)&address,
-                           sizeof(address)); //TODO: loop in new function
-    while ((C_STANDARD_FAILURE_VALUE) == return_value && (ECONNREFUSED == errno)) {
-        /* Continue to try to connect until the server will listen for connections */
-        DEBUG_PRINT("here");
-        errno = 0;
-        return_value = connect(temp_socket, (const struct sockaddr *)&address, sizeof(address));
-    }
-    if (C_STANDARD_FAILURE_VALUE == return_value) {
-        status = ZASH_STATUS_SOCKET_TCP_CLIENT_CONNECT_FAILED;
+    status = socket_tcp_connect(temp_socket, address);
+    if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }

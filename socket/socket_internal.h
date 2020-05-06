@@ -204,7 +204,7 @@ enum zash_status socket_get_syn_filter(int16_t port,
  *
  * @param [in]     port                  the destination port to allow syn packet on.
  *
- * @param [in]     port                  the socket to attach filter to.
+ * @param [in]     raw_socket            the socket to attach filter to.
  *
  * @return         return value indicating an error may returned.
  *
@@ -214,5 +214,18 @@ enum zash_status socket_get_syn_filter(int16_t port,
  */
 enum zash_status socket_attach_syn_filter(int16_t port, int raw_socket);
 
+/**
+ * @brief Connect a socket to a distant address.
+ *
+ * @param [in]     fd_socket             the socket to connect.
+ *
+ * @param [in]     address               the address to connect the socket to.
+ *
+ * @return         return value indicating an error may returned.
+ *
+ * @note           this function may block until the distant address will listen for connections.
+ *
+ */
+enum zash_status socket_tcp_connect(int fd_socket, struct sockaddr_in address);
 
 #endif //ZASH_SOCKET_INTERNAL_H
