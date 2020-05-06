@@ -1,20 +1,76 @@
-//
-// Created by user on 5/4/20.
-//
+/**
+ * @brief This module is a daemon server that wait for port
+ *        knocking from a client, let it run commands.
+ * @aouther Z.F
+ * @date 04/05/2020
+ */
 
+/** Headers ***************************************************/
 #include <unistd.h>
 #include <stdbool.h>
 
 #include "common.h"
 #include "config.h"
 #include "daemon/daemon.h"
-#include "socket/socket.h"
-#include "shell/shell.h"
 
 #include "server.h"
+#include "server_internal.h"
 
-/* The maximum length of an ip4 text. */
-#define SERVER_MAX_IP_LENGTH (16)
+/** Functions ************************************************/
+enum zash_status server_prepare(const char *interface,
+                                struct SHELL_context **shell,
+                                struct SOCKET_syn_context **socket_context)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+    enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
+
+    struct SHELL_context *temp_shell = NULL;
+    struct SOCKET_syn_context *temp_socket = NULL;
+
+    /* Become a daemon */
+    status = DAEMON_daemonize();
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Create a shell object */
+    status = SHELL_create(&temp_shell);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Create a socket syn object */
+    status = SOCKET_syn_create(interface, &temp_socket);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Transfer Ownership */
+    *shell = temp_shell;
+    temp_shell = NULL;
+    *socket_context = temp_socket;
+    temp_socket = NULL;
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    if (NULL != temp_socket) {
+        temp_status = SOCKET_syn_destroy(temp_socket);
+        ZASH_UPDATE_STATUS(status, temp_status);
+    }
+
+    if (NULL != temp_shell) {
+        temp_status = SHELL_destroy(temp_shell);
+        ZASH_UPDATE_STATUS(status, temp_status);
+    }
+
+    return status;
+}
 
 
 enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
@@ -24,7 +80,7 @@ enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     size_t amount_of_knocking = 0;
-    char prev_ip[SERVER_MAX_IP_LENGTH] = {0};
+    char previous_ip[SERVER_MAX_IP_LENGTH] = {0};
     char ip[SERVER_MAX_IP_LENGTH] = {0};
     uint16_t temp_listening_port = 0;
     size_t data_len = 0;
@@ -34,23 +90,26 @@ enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
     ASSERT(NULL != context);
     ASSERT(NULL != listening_port);
 
+    /* Listen for port knocking until 5 knocks arrive from the same address */
     while (amount_of_knocking < ZASH_NUMBER_OF_SYN_KNOCKS) {
 
         data_len = sizeof(listening_port);
 
+        /* Get a port knock - a syn packet */
         status = SOCKET_syn_receive(context, port, &data_len, (uint8_t *)&temp_listening_port, ip);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
-        strncmp_return_value = strncmp(ip, prev_ip, SERVER_MAX_IP_LENGTH);
+        /* Check if the source ip of the syn packet is the same as the previous one. */
+        strncmp_return_value = strncmp(ip, previous_ip, SERVER_MAX_IP_LENGTH);
         if (0 != strncmp_return_value) {
             amount_of_knocking = 0;
         }
 
         amount_of_knocking++;
-        (void)strncpy(prev_ip, ip, SERVER_MAX_IP_LENGTH);
+        (void)strncpy(previous_ip, ip, SERVER_MAX_IP_LENGTH);
 
     }
 
@@ -75,6 +134,7 @@ enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket)
     /* Check for valid parameters */
     ASSERT(NULL != shell);
 
+    /* Open the standard input file as the socket */
     return_value = dup2(fd_socket, STDIN_FILENO);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SERVER_RUN_SHELL_DUP2_STDIN_FAILED;
@@ -82,6 +142,7 @@ enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket)
         goto lbl_cleanup;
     }
 
+    /* Open the standard output file as the socket */
     return_value = dup2(fd_socket, STDOUT_FILENO);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SERVER_RUN_SHELL_DUP2_STDOUT_FAILED;
@@ -89,6 +150,7 @@ enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket)
         goto lbl_cleanup;
     }
 
+    /* Open the standard error file as the socket */
     return_value = dup2(fd_socket, STDERR_FILENO);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SERVER_RUN_SHELL_DUP2_STDERR_FAILED;
@@ -96,6 +158,7 @@ enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket)
         goto lbl_cleanup;
     }
 
+    /* Run the shell. */
     status = SHELL_run(shell);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
@@ -107,15 +170,23 @@ enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket)
 
 lbl_cleanup:
 
-    (void)close(STDOUT_FILENO);
-    (void)close(STDIN_FILENO);
-    (void)close(STDERR_FILENO);
+    if (fd_socket != STDERR_FILENO) {
+        (void)close(STDERR_FILENO);
+    }
+
+    if (fd_socket != STDOUT_FILENO) {
+        (void)close(STDOUT_FILENO);
+    }
+
+    if (fd_socket != STDIN_FILENO) {
+        (void)close(STDIN_FILENO);
+    }
 
     return status;
 }
 
 
-enum zash_status SERVER_run(uint16_t port, char *interface)
+enum zash_status SERVER_run(uint16_t port, const char *interface)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
@@ -132,37 +203,31 @@ enum zash_status SERVER_run(uint16_t port, char *interface)
         goto lbl_cleanup;
     }
 
-    status = DAEMON_daemonize();
+    /* Prepare for running the server */
+    status = server_prepare(interface, &shell, &socket_context);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
-    status = SHELL_create(&shell);
-    if (ZASH_STATUS_SUCCESS != status) {
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
-
-    status = SOCKET_syn_create(interface, &socket_context);
-    if (ZASH_STATUS_SUCCESS != status) {
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
-
+    /* Run the server forever. */
     while (true) {
+
+        /* Get the port to listen for connection on */
         status = server_get_listening_port(socket_context, port, &listening_port);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
+        /* Create a connection */
         status = SOCKET_tcp_server(interface, listening_port, &fd_socket);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
+        /* Run the shell for distant client to use */
         status = server_run_shell(shell, fd_socket);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
@@ -171,9 +236,6 @@ enum zash_status SERVER_run(uint16_t port, char *interface)
 
         CLOSE(fd_socket);
     }
-
-    /* Indicate Success */
-    status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
 
@@ -190,7 +252,9 @@ lbl_cleanup:
     return status;
 }
 
+
 //TODO: remove main
-void main(int argc, char *argv[]) {
+void main(int argc, char *argv[])
+{
     SERVER_run(2020, argv[1]);
 }

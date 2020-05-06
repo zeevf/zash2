@@ -68,11 +68,14 @@ enum zash_status SOCKET_syn_send(struct SOCKET_syn_context *context,
  * @param [in,out]  data_len          contains the maximum length of data to get from the packet.
  *                                    return the actual data size.
  *
- * @param [in]      data              the payload of the syn packet.
+ * @param [out]     data              the payload of the syn packet.
  *
- * @param [in]      ip                the source ip that sent the packet.
+ * @param [out]     ip                the source ip that sent the packet.
  *
  * @return          return value indicating an error may returned.
+ *
+ * @note            ip must be previously allocated with at least 16 bytes length, the maximum size
+ *                  of an ip address.
  *
  */
 enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
