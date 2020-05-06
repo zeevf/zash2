@@ -109,6 +109,7 @@ lbl_cleanup:
 
     (void)close(STDOUT_FILENO);
     (void)close(STDIN_FILENO);
+    (void)close(STDERR_FILENO);
 
     return status;
 }
@@ -167,6 +168,8 @@ enum zash_status SERVER_run(uint16_t port, char *interface)
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
+
+        CLOSE(fd_socket);
     }
 
     /* Indicate Success */

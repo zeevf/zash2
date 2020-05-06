@@ -15,11 +15,12 @@
 /* The maximum length of data to transfer between socket and terminal at once */
 #define MAX_TRANSFER_LENGTH (4096)
 
+
 enum zash_status client_copy_fd(int source, int dest, size_t length)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
-    char *data  = NULL;
+    char *data = NULL;
     ssize_t return_value = C_STANDARD_FAILURE_VALUE;
 
     data = HEAPALLOCZ(sizeof(*data) * length);
@@ -30,17 +31,19 @@ enum zash_status client_copy_fd(int source, int dest, size_t length)
     }
 
     return_value = read(source, data, length);
-    if (C_STANDARD_FAILURE_VALUE == return_value) {
-        status = ZASH_STATUS_CLIENT_COPY_FD_READ_FAILED;
-        DEBUG_PRINT("status: %d", status);
-        goto lbl_cleanup;
-    }
-
-    if (0 == return_value) {
+    if ((0 == return_value) ||
+        ((C_STANDARD_FAILURE_VALUE == return_value) && (ECONNRESET == errno))) {
         status = ZASH_STATUS_CLIENT_COPY_FD_EMPTY_FILE;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
+    if ((C_STANDARD_FAILURE_VALUE == return_value)) {
+        status = ZASH_STATUS_CLIENT_COPY_FD_READ_FAILED;
+        perror("errork");
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
 
     return_value = write(dest, data, length);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
@@ -204,7 +207,9 @@ lbl_cleanup:
     return status;
 }
 
+
 //TODO: remove main
-void main(int argc, char *argv[]) {
-    CLIENT_run(argv[1], argv[2], 2020, 5780);
+void main(int argc, char *argv[])
+{
+    CLIENT_run(argv[1], argv[2], 2020, 6666);
 }

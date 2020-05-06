@@ -1,46 +1,28 @@
-//
-// Created by user on 5/3/20.
-//
+/**
+ * @brief This module contains function related to socket.
+ *        It can send and receive syn packet and open a tcp session.
+ * @aouther Z.F
+ * @date 03/05/2020
+ */
 
+
+/** Headers ***************************************************/
 #include <unistd.h>
 #include <sys/socket.h>
-#include <netinet/tcp.h>
 #include <netinet/ip.h>
 #include <netinet/in.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
 #include <arpa/inet.h>
-#include <linux/filter.h>
+#include <time.h>
 
 #include "common.h"
 
 #include "socket.h"
-
-/* The index in the filter to insert port number into */
-#define SOCKET_PORT_INDEX_IN_FILTER (2)
-/* The success value of inet_pton function */
-#define SOCKET_INET_PTON_SUCCESS (1)
-/* The size of an ip header in words */
-#define SOCKET_IP_SIZE (5)
-/* The value of a turned on flag */
-#define SOCKET_FLAG_ON (1)
-/* The maximum of connections to listen into */
-#define SOCKET_LISTEN_MAX_CONNECTIONS (1)
-
-struct SOCKET_syn_context {
-    int raw_socket;
-};
-
-const struct sock_filter global_filter_instructions[] = {
-
-        {BPF_LDX | BPF_B | BPF_MSH,  0, 0, 0x00000000},
-        {BPF_LD | BPF_H | BPF_IND,   0, 0, 0x00000002},
-        {BPF_JMP | BPF_JEQ | BPF_K,  0, 3, 0x00000000},
-        {BPF_LD | BPF_B | BPF_IND,   0, 0, 0x0000000d},
-        {BPF_JMP | BPF_JSET | BPF_K, 0, 1, 0x00000002},
-        {BPF_RET, 0, 0, 0x00040000},
-        {BPF_RET, 0, 0, 0000000000},
-};
+#include "socket_internal.h"
 
 
+/** Functions ************************************************/
 enum zash_status socket_bind_interface(int socket_fd, const char *interface)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -72,24 +54,186 @@ lbl_cleanup:
 }
 
 
-enum zash_status socket_get_tcp_syn_header(uint16_t port, struct tcphdr *header)
+enum zash_status socket_get_interface_ip(int socket_fd, const char *interface, uint32_t *ip)
+{
+
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    uint32_t temp_ip = 0;
+    struct ifreq request = {0};
+    int return_value = C_STANDARD_FAILURE_VALUE;
+
+    /* Fill ioctl request for interface ip */
+    request.ifr_addr.sa_family = AF_INET;
+    (void)strncpy(request.ifr_name, interface, IFNAMSIZ);
+
+    /* Get interface ip */
+    return_value = ioctl(socket_fd, SIOCGIFADDR, &request);
+    if (C_STANDARD_FAILURE_VALUE == return_value) {
+        status = ZASH_STATUS_SOCKET_SYN_CREATE_IOCTL_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+    temp_ip = ((struct sockaddr_in *)&request.ifr_addr)->sin_addr.s_addr;
+
+    /* Transfer Ownership */
+    *ip = temp_ip;
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+
+}
+
+
+enum zash_status
+socket_calculate_checksum(const uint8_t *buffer, size_t buffer_len, uint16_t *checksum)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
-    struct tcphdr temp_header = {0};
-    uint16_t network_port = 0;
+    uint32_t temp_checksum = 0;
+    uint32_t sum = 0;
+    const uint16_t *short_buffer = (uint16_t *)buffer;
+    size_t short_buffer_len = buffer_len / sizeof(uint16_t);
+    size_t i = 0;
+
+    /* Check for valid parameters */
+    ASSERT (NULL != buffer);
+    ASSERT (NULL != checksum);
+
+    /* Sum up the buffer data as short array */
+    for (i = 0; i < short_buffer_len; ++i) {
+        sum += short_buffer[i];
+    }
+
+    /* If the buffer has an odd length, add the last byte in it */
+    if (IS_ODD(buffer_len)) {
+        sum += buffer[buffer_len - 1];
+    }
+
+    /* Calculate the checksum */
+    temp_checksum = (sum >> (BITS_IN_BYTE * sizeof(uint16_t))) + (sum & (uint16_t)~(0));
+    temp_checksum += temp_checksum >> (BITS_IN_BYTE * sizeof(uint16_t));
+
+    /* Transfer Ownership */
+    *checksum = (uint16_t)(~temp_checksum);
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+
+}
+
+
+enum zash_status socket_get_tcp_checksum(uint32_t source_ip,
+                                         uint32_t dest_ip,
+                                         struct tcphdr *header,
+                                         const uint8_t *data,
+                                         size_t data_len,
+                                         uint16_t *checksum)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    uint16_t temp_checksum = 0;
+    struct socket_checksum_header checksum_header = {0};
+    uint8_t *checksum_packet = NULL;
+    struct sockaddr_in address = {0};
+    socklen_t address_len = sizeof(address);
     int return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
     ASSERT (NULL != header);
+    ASSERT (NULL != data);
+    ASSERT (NULL != checksum);
 
-    /* convert port to network byte order */
-    network_port = htons(port);
+    /* Set up checksum header fields */
+    checksum_header.source_ip = source_ip;
+    checksum_header.source_ip = dest_ip;
+    checksum_header.protocol = IPPROTO_TCP;
+    checksum_header.tcp_length = htons((header->doff * BYTES_IN_WORD) + data_len);
+    checksum_header.tcp_header = *header;
 
-    /* Initialize tcp header */
-    temp_header.dest = network_port;
+    /* For checksum calculation purpose, the checksum field on the tcp header is zero */
+    checksum_header.tcp_header.check = 0;
+
+    /* Allocate memory for checksum packet */
+    checksum_packet = HEAPALLOCZ(sizeof(checksum_packet) * (sizeof(checksum_header) + data_len));
+    if (NULL == checksum_packet) {
+        status = ZASH_STATUS_SOCKET_GET_TCP_CHECKSUM_CALLOC_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Copy data into checksum packet */
+    (void)memcpy(checksum_packet, &checksum_header, sizeof(checksum_header));
+    (void)memcpy(checksum_packet + sizeof(checksum_header), data, data_len);
+
+    /* Calculate Checksum */
+    status = socket_calculate_checksum(checksum_packet,
+                                       sizeof(checksum_header) + data_len,
+                                       &temp_checksum);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Transfer Ownership */
+    *checksum = temp_checksum;
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    HEAPFREE(checksum_packet);
+
+    return status;
+}
+
+
+enum zash_status socket_get_tcp_syn_header(uint32_t source_ip,
+                                           uint32_t dest_ip,
+                                           uint16_t port,
+                                           const uint8_t *data,
+                                           size_t data_len,
+                                           struct tcphdr *header)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    struct tcphdr temp_header = {0};
+    uint16_t checksum = 0;
+    long random_value = 0;
+    int return_value = C_STANDARD_FAILURE_VALUE;
+
+    /* Check for valid parameters */
+    ASSERT (NULL != data);
+    ASSERT (NULL != header);
+
+    /* Set tcp header values */
+    temp_header.dest = htons(port);
     temp_header.syn = SOCKET_FLAG_ON;
     temp_header.doff = SOCKET_IP_SIZE;
+    temp_header.window = htons(SOCKET_WINDOW_SIZE);
+
+    /* Set up random port and sequence values*/
+    random_value = random();
+    temp_header.seq = htonl(random_value);
+    random_value = random();
+    temp_header.source = htons(random_value);
+
+    /* Calculate tcp checksum */
+    status = socket_get_tcp_checksum(source_ip, dest_ip, &temp_header, data, data_len, &checksum);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+    temp_header.check = checksum;
 
     /* Transfer Ownership */
     *header = temp_header;
@@ -244,6 +388,7 @@ enum zash_status SOCKET_syn_create(const char *interface, struct SOCKET_syn_cont
 
     struct SOCKET_syn_context *temp_context = NULL;
     int temp_socket = INVALID_FILE_DESCRIPTOR;
+    time_t current_time = 0;
 
     /* Check for valid parameters */
     if ((NULL == context) || (NULL == interface)) {
@@ -275,6 +420,17 @@ enum zash_status SOCKET_syn_create(const char *interface, struct SOCKET_syn_cont
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
+
+    /* Get the source ip of the interface */
+    status = socket_get_interface_ip(temp_socket, interface, &temp_context->source_ip);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Set random sed to create random ports */
+    current_time = time(NULL);
+    (void)srandom(current_time);
 
     /* Transfer Ownership */
     temp_context->raw_socket = temp_socket;
@@ -321,15 +477,15 @@ enum zash_status SOCKET_syn_send(struct SOCKET_syn_context *context,
         goto lbl_cleanup;
     }
 
-    /* Get the tcp header of the syn packet */
-    status = socket_get_tcp_syn_header(port, &header);
+    /* Get the destination address */
+    status = socket_get_address(port, ip, &address);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
-    /* Get the destination address */
-    status = socket_get_address(port, ip, &address);
+    /* Get the tcp header of the syn packet */
+    status = socket_get_tcp_syn_header(context->source_ip, address.sin_addr.s_addr, port, data, data_len, &header);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -385,6 +541,7 @@ enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
 
     uint8_t *packet = NULL;
     struct iphdr *ip_header = NULL;
+    struct tcphdr *tcp_header = NULL;
     uint8_t *payload = NULL;
     size_t packet_len = 0;
     struct in_addr address = {0};
@@ -414,9 +571,6 @@ enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
         goto lbl_cleanup;
     }
 
-    ip_header = (struct iphdr *)packet;
-    payload = packet + sizeof(struct iphdr) + sizeof(struct tcphdr);
-
     /* receive the packet */
     return_value = recv(context->raw_socket, packet, packet_len, 0);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
@@ -424,6 +578,12 @@ enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
+
+    /* Get the headers and payloads of the packet */
+    ip_header = (struct iphdr *)packet;
+    tcp_header = (struct tcphdr *)(packet + (ip_header->ihl * BYTES_IN_WORD));
+    payload = (uint8_t *)(tcp_header) + (tcp_header->doff * BYTES_IN_WORD);
+
 
     /* Extract source ip address from packet header */
     address.s_addr = ip_header->saddr;
@@ -462,8 +622,7 @@ enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context)
 }
 
 
-enum zash_status
-SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd)
+enum zash_status SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -507,6 +666,8 @@ SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd)
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SOCKET_TCP_SERVER_BIND_FAILED;
         DEBUG_PRINT("status: %d", status);
+        DEBUG_PRINT("server_socket: %d, port to bind: %d", server_socket, port);
+        perror("errno");
         goto lbl_cleanup;
     }
 
@@ -583,9 +744,12 @@ SOCKET_tcp_client(const char *interface, const char *ip, uint16_t port, int *soc
 
     /* connect to the destination */
     errno = 0;
-    return_value = connect(temp_socket, (const struct sockaddr *)&address, sizeof(address)); //TODO: loop in new function
+    return_value = connect(temp_socket,
+                           (const struct sockaddr *)&address,
+                           sizeof(address)); //TODO: loop in new function
     while ((C_STANDARD_FAILURE_VALUE) == return_value && (ECONNREFUSED == errno)) {
         /* Continue to try to connect until the server will listen for connections */
+        DEBUG_PRINT("here");
         errno = 0;
         return_value = connect(temp_socket, (const struct sockaddr *)&address, sizeof(address));
     }

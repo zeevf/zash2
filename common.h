@@ -60,6 +60,11 @@
 #define FOPEN_READ_ONLY "r"
 #define DECIMAL_BASE (10)
 #define ROOT_DIRECTORY "/"
+#define BYTES_IN_WORD (4)
+#define BITS_IN_BYTE (8)
+
+#define IS_EVEN(num) (0 == ((num) % 2))
+#define IS_ODD(num) (0 != ((num) % 2))
 #define ARRAY_LEN(array) (sizeof(array) / sizeof(*(array)))
 
 #endif //ZASH_COMMON_H
