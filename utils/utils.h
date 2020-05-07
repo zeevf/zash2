@@ -65,8 +65,24 @@ UTILS_iter_dir(const char *dir_path, UTILS_iter_dir_callback_t callback, void *a
  * @param [in]           new_path         the path of the new file to copy into.
  *
  * @return               return value indicating an error may returned.
+ *
  */
 enum zash_status UTILS_copy_file(const char *path, const char *new_path);
+
+
+/**
+ * @brief Copy from one fd to another.
+ *
+ * @param [in]           source           the fd to copy from.
+ *
+ * @param [in]           dest             the fd to copy into.
+ *
+ * @param [in]           length           the length of data to copy, in bytes.
+ *
+ * @return               return value indicating an error may returned.
+ *
+ */
+enum zash_status UTILS_copy_fd(int source, int dest, size_t length);
 
 
 #endif //ZASH_UTILS_H

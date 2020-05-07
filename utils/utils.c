@@ -322,3 +322,54 @@ lbl_cleanup:
 
     return status;
 }
+
+enum zash_status UTILS_copy_fd(int source, int dest, size_t length)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    char *buffer = NULL;
+    ssize_t return_value = C_STANDARD_FAILURE_VALUE;
+
+    /* Allocate memory for buffer */
+    buffer = HEAPALLOCZ(sizeof(*buffer) * length);
+    if (NULL == buffer) {
+        status = ZASH_STATUS_UTILS_COPY_FD_CALLOC_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Read the data from fd to copy */
+    return_value = read(source, buffer, length);
+
+    /* If no data was read, or a socket was closed, it's a different error. */
+    if ((0 == return_value) ||
+        ((C_STANDARD_FAILURE_VALUE == return_value) && (ECONNRESET == errno))) {
+        status = ZASH_STATUS_UTILS_COPY_FD_EMPTY_FILE;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+    if ((C_STANDARD_FAILURE_VALUE == return_value)) {
+        status = ZASH_STATUS_UTILS_COPY_FD_READ_FAILED;
+        perror("errork");
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Write the data read to the fd to write into. */
+    return_value = write(dest, buffer, return_value);
+    if (C_STANDARD_FAILURE_VALUE == return_value) {
+        status = ZASH_STATUS_UTILS_COPY_FD_WRITE_FAILED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    HEAPFREE(buffer);
+
+    return status;
+
+}
