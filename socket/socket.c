@@ -115,11 +115,10 @@ socket_calculate_checksum(const uint8_t *buffer, size_t buffer_len, uint16_t *ch
     }
 
     /* Calculate the checksum */
-    temp_checksum = (sum >> (BITS_IN_BYTE * sizeof(uint16_t))) + (sum & (uint16_t)~(0));
-    temp_checksum += temp_checksum >> (BITS_IN_BYTE * sizeof(uint16_t));
+    SOCKET_CALCULATE_CHECKSUM(sum, temp_checksum);
 
     /* Transfer Ownership */
-    *checksum = (uint16_t)(~temp_checksum);
+    *checksum = temp_checksum;
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
@@ -498,6 +497,7 @@ enum zash_status SOCKET_syn_send(struct SOCKET_syn_context *context,
     struct tcphdr header = {0};
     struct sockaddr_in address = {0};
     size_t packet_len = 0;
+    uint32_t dest_ip = 0;
     int return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
@@ -513,14 +513,10 @@ enum zash_status SOCKET_syn_send(struct SOCKET_syn_context *context,
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
+    dest_ip = (uint32_t)address.sin_addr.s_addr;
 
     /* Get the tcp header of the syn packet */
-    status = socket_get_tcp_syn_header(context->source_ip,
-                                       address.sin_addr.s_addr,
-                                       port,
-                                       data,
-                                       data_len,
-                                       &header);
+    status = socket_get_tcp_syn_header(context->source_ip, dest_ip, port, data, data_len, &header);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -620,7 +616,7 @@ enum zash_status SOCKET_syn_receive(struct SOCKET_syn_context *context,
     payload = (uint8_t *)(tcp_header) + (tcp_header->doff * BYTES_IN_WORD);
 
 
-    /* Extract source ip address from packet header */
+    /* Get source ip address from packet header */
     address.s_addr = ip_header->saddr;
     src_ip = inet_ntoa(address);
 
@@ -701,8 +697,6 @@ enum zash_status SOCKET_tcp_server(const char *interface, uint16_t port, int *so
     if (C_STANDARD_FAILURE_VALUE == return_value) {
         status = ZASH_STATUS_SOCKET_TCP_SERVER_BIND_FAILED;
         DEBUG_PRINT("status: %d", status);
-        DEBUG_PRINT("server_socket: %d, port to bind: %d", server_socket, port);
-        perror("errno");
         goto lbl_cleanup;
     }
 

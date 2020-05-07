@@ -28,6 +28,7 @@ enum zash_status client_port_knock(const char *interface,
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+    enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
     struct SOCKET_syn_context *context = NULL;
     int temp_socket = INVALID_FILE_DESCRIPTOR;
@@ -77,6 +78,11 @@ enum zash_status client_port_knock(const char *interface,
 lbl_cleanup:
 
     CLOSE(temp_socket);
+
+    if (NULL != context) {
+        temp_status = SOCKET_syn_destroy(context);
+        ZASH_UPDATE_STATUS(status, temp_status);
+    }
 
     return status;
 }

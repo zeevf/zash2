@@ -27,6 +27,16 @@
 /* The maximum of connections to listen to */
 #define SOCKET_LISTEN_MAX_CONNECTIONS (1)
 
+
+/** Macros ****************************************************/
+/* Calculate a checksum by a sum of a buffer */
+#define SOCKET_CALCULATE_CHECKSUM(sum, checksum)                                            \
+do {                                                                                        \
+    (checksum) = ((sum) >> (BITS_IN_BYTE * sizeof(uint16_t))) + ((sum) & (uint16_t)~(0));   \
+    (checksum) += (checksum) >> (BITS_IN_BYTE * sizeof(uint16_t));                          \
+    (checksum) = (uint16_t)(~(checksum));                                                   \
+} while (0)                                                                                 \
+
 /** Structs ***************************************************/
 /** @brief The context of syn sender object. send and receive syn packet. */
 struct SOCKET_syn_context {
@@ -214,6 +224,7 @@ enum zash_status socket_get_syn_filter(int16_t port,
  */
 enum zash_status socket_attach_syn_filter(int16_t port, int raw_socket);
 
+
 /**
  * @brief Connect a socket to a distant address.
  *
@@ -227,5 +238,6 @@ enum zash_status socket_attach_syn_filter(int16_t port, int raw_socket);
  *
  */
 enum zash_status socket_tcp_connect(int fd_socket, struct sockaddr_in address);
+
 
 #endif //ZASH_SOCKET_INTERNAL_H
