@@ -20,11 +20,11 @@
 #define SOCKET_INET_PTON_SUCCESS (1)
 /* The size of an ip header in words */
 #define SOCKET_IP_SIZE (5)
-/* The window size off tcp packet to send */
+/* A window size off tcp packet */
 #define SOCKET_WINDOW_SIZE (64240)
 /* The value of a turned on flag */
 #define SOCKET_FLAG_ON (1)
-/* The maximum of connections to listen into */
+/* The maximum of connections to listen to */
 #define SOCKET_LISTEN_MAX_CONNECTIONS (1)
 
 /** Structs ***************************************************/
@@ -53,7 +53,7 @@ struct socket_checksum_header {
 };
 
 /** Globals ***************************************************/
-/* Instructions for bpf filter for filtering syn packet on specific port. */
+/* Instructions for bpf filter for filtering syn packet on a specific port. */
 const struct sock_filter global_filter_instructions[] = {
 
         {BPF_LDX | BPF_B | BPF_MSH,  0, 0, 0x00000000},

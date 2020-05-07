@@ -20,19 +20,19 @@
  *
  * @param [in]           ip               the ip address of the distant server.
  *
- * @param [in]           port             the port to send port knock to.
+ * @param [in]           port_to_knock    the port to send port knock to.
  *
  * @param [in]           port_to_connect  the port to connect to with tcp after the port knocking.
  *
  * @return              return value indicating an error may returned.
  *
- * @note                 dont use this function if the server is'nt listening for port knocking;
+ * @note                 don't use this function if the server is'nt listening for port knocking;
  *                       it might block forever.
  *
  * @note                 if this function succeed, it returns after the distant shell is closed.
  */
 enum zash_status
-CLIENT_run(const char *interface, const char *ip, uint16_t port, uint16_t port_to_connect);
+CLIENT_run(const char *interface, const char *ip, uint16_t port_to_knock, uint16_t port_to_connect);
 
 
 #endif //ZASH_CLIENT_H

@@ -251,10 +251,3 @@ lbl_cleanup:
 
     return status;
 }
-
-
-//TODO: remove main
-void main(int argc, char *argv[])
-{
-    SERVER_run(2020, argv[1]);
-}
