@@ -38,7 +38,7 @@ do {                                                                            
 } while (0)                                                                                 \
 
 /** Structs ***************************************************/
-/** @brief The context of syn sender object. send and receive syn packet. */
+/** @brief The context of syn transmitter object. send and receive syn packet. */
 struct SOCKET_syn_context {
     /* The raw socket to send and receive syn packet with */
     int raw_socket;
@@ -46,7 +46,7 @@ struct SOCKET_syn_context {
     uint32_t source_ip;
 };
 
-/** The packet header used to calculate tcp checksum */
+/** @brief The packet header used to calculate tcp checksum */
 struct socket_checksum_header {
     /* The source ip of the packet */
     uint32_t source_ip;
@@ -64,7 +64,7 @@ struct socket_checksum_header {
 
 /** Globals ***************************************************/
 /* Instructions for bpf filter for filtering syn packet on a specific port. */
-const struct sock_filter global_filter_instructions[] = {
+const struct sock_filter socket_filter_instructions[] = {
 
         {BPF_LDX | BPF_B | BPF_MSH,  0, 0, 0x00000000},
         {BPF_LD | BPF_H | BPF_IND,   0, 0, 0x00000002},
@@ -131,7 +131,7 @@ socket_calculate_checksum(const uint8_t *buffer, size_t buffer_len, uint16_t *ch
  *
  * @param [in]     header              the tcp header of the packet.
  *
- * @param [in]     data                the payload of the packet.
+ * @param [in,opt] data                the payload of the packet.
  *
  * @param [in]     data_len            the length of the payload, in bytes.
  *
@@ -149,7 +149,7 @@ enum zash_status socket_get_tcp_checksum(uint32_t source_ip,
 
 
 /**
- * @brief Create a header for a tcp packet.
+ * @brief Get a header for a tcp packet.
  *
  * @param [in]     source_ip           the source ip of the packet, in binary form.
  *
@@ -157,11 +157,11 @@ enum zash_status socket_get_tcp_checksum(uint32_t source_ip,
  *
  * @param [in]     port                the destination port of the packet.
  *
- * @param [in]     data                the payload of the packet.
+ * @param [in,opt] data                the payload of the packet.
  *
  * @param [in]     data_len            the length of the payload, in bytes.
  *
- * @param [out]    checksum            the checksum calculated.
+ * @param [out]    header              a tcp header for the packet.
  *
  * @return         return value indicating an error may returned.
  *
@@ -203,6 +203,8 @@ enum zash_status socket_get_address(uint16_t port, const char *ip, struct sockad
  * @note           to make sure this filter accept only tcp syn packet, attach it to inet socket
  *                 with tcp protocol.
  *
+ * @note           the filter should be destroyed using free.
+ *
  */
 enum zash_status socket_get_syn_filter(int16_t port,
                                        struct sock_filter **filter_instructions,
@@ -237,7 +239,7 @@ enum zash_status socket_attach_syn_filter(int16_t port, int raw_socket);
  * @note           this function may block until the distant address will listen for connections.
  *
  */
-enum zash_status socket_tcp_connect(int fd_socket, struct sockaddr_in address);
+enum zash_status socket_tcp_connect(int fd_socket, struct sockaddr_in *address);
 
 
 #endif //ZASH_SOCKET_INTERNAL_H

@@ -73,9 +73,10 @@ lbl_cleanup:
 }
 
 
-enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
-                                           uint16_t port,
-                                           uint16_t *listening_port)
+enum zash_status server_get_address_to_connect(struct SOCKET_syn_context *context,
+                                               uint16_t port,
+                                               uint16_t *port_to_connect,
+                                               char *ip_to_connect)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
@@ -88,12 +89,13 @@ enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
 
     /* Check for valid parameters */
     ASSERT(NULL != context);
-    ASSERT(NULL != listening_port);
+    ASSERT(NULL != port_to_connect);
+    ASSERT(NULL != ip_to_connect);
 
     /* Listen for port knocking until 5 knocks arrive from the same address */
     while (amount_of_knocking < ZASH_NUMBER_OF_SYN_KNOCKS) {
 
-        data_len = sizeof(listening_port);
+        data_len = sizeof(temp_listening_port);
 
         /* Get a port knock - a syn packet */
         status = SOCKET_syn_receive(context, port, &data_len, (uint8_t *)&temp_listening_port, ip);
@@ -114,7 +116,8 @@ enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
     }
 
     /* Transfer Ownership */
-    *listening_port = temp_listening_port;
+    *port_to_connect = temp_listening_port;
+    (void)strncpy(ip_to_connect, ip, SERVER_MAX_IP_LENGTH);
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
@@ -193,8 +196,9 @@ enum zash_status SERVER_run(uint16_t port, const char *interface)
 
     struct SHELL_context *shell = NULL;
     struct SOCKET_syn_context *socket_context = NULL;
-    uint16_t listening_port = 0;
+    uint16_t port_to_connect = 0;
     int fd_socket = INVALID_FILE_DESCRIPTOR;
+    char ip [SERVER_MAX_IP_LENGTH] = {0};
 
     /* Check for valid parameters */
     if (NULL == interface) {
@@ -213,15 +217,15 @@ enum zash_status SERVER_run(uint16_t port, const char *interface)
     /* Run the server forever. */
     while (true) {
 
-        /* Get the port to listen for connection on */
-        status = server_get_listening_port(socket_context, port, &listening_port);
+        /* Get the address that to connect */
+        status = server_get_address_to_connect(socket_context, port, &port_to_connect, ip);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
-        /* Create a connection */
-        status = SOCKET_tcp_server(interface, listening_port, &fd_socket);
+        /* Connect to client */
+        status = SOCKET_tcp_client(ip, port_to_connect, &fd_socket);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;

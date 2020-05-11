@@ -11,7 +11,7 @@
 #include "daemon.h"
 
 /** Constants ************************************************/
-/* The path to pass to umask in order to remove any restrictions on file creating mode. */
+/* The value to pass to umask in order to remove any restrictions on file creating mode. */
 #define DAEMON_UMASK_NO_RESTRICTION (0)
 /* The path of the null file. */
 #define DAEMON_NULL_FILE_PATH "/dev/null"

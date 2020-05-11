@@ -23,7 +23,7 @@
 enum zash_status client_port_knock(const char *interface,
                                    const char *ip,
                                    uint16_t port,
-                                   uint16_t port_to_connect,
+                                   uint16_t listen_port,
                                    int *fd_socket)
 {
 
@@ -31,6 +31,7 @@ enum zash_status client_port_knock(const char *interface,
     enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
     struct SOCKET_syn_context *context = NULL;
+    int server_socket = INVALID_FILE_DESCRIPTOR;
     int temp_socket = INVALID_FILE_DESCRIPTOR;
     size_t i = 0;
 
@@ -46,23 +47,36 @@ enum zash_status client_port_knock(const char *interface,
         goto lbl_cleanup;
     }
 
-    /* Knock 5 times */
-    for (i = 0; i < ZASH_NUMBER_OF_SYN_KNOCKS; ++i) {
+    status = SOCKET_tcp_server(listen_port, &server_socket);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
 
-        /* Send a syn packet with the port to connect to on as payload */
-        status = SOCKET_syn_send(context,
-                                 ip,
-                                 port,
-                                 (uint8_t *)&port_to_connect,
-                                 sizeof(port_to_connect));
+    /* Knock 4 times */
+    for (i = 0; i < ZASH_NUMBER_OF_SYN_KNOCKS - 1; ++i) {
+
+        /* Send a syn packet for port knocking */
+        status = SOCKET_syn_send(context, ip, port, NULL, 0);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
     }
 
-    /* Connect to the server */
-    status = SOCKET_tcp_client(interface, ip, port_to_connect, &temp_socket);
+    /* Knock final time. Send a syn packet with the port to connect to as payload */
+    status = SOCKET_syn_send(context,
+                             ip,
+                             port,
+                             (uint8_t *)&listen_port,
+                             sizeof(listen_port));
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* listen for the server */
+    status = SOCKET_accept(server_socket, &temp_socket);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -88,22 +102,25 @@ lbl_cleanup:
 }
 
 
-enum zash_status client_connect_terminal_to_socket(int fd_socket)
+enum zash_status client_connect_terminal_to_fd(int fd)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     fd_set set = {0};
-    int nfds = MAX(fd_socket, STDIN_FILENO) + 1;
+    int nfds = 0;
     int return_value = C_STANDARD_FAILURE_VALUE;
     bool is_fd_ready = false;
+
+    /* Set number of fds to contain the socket and standard input */
+    nfds = MAX(fd, STDIN_FILENO) + 1;
 
     /* Transform data from standard io to the shell */
     while (true) {
 
         /* Reset the fd set to contain standard input and socket */
         FD_ZERO(&set);
-        FD_SET(fd_socket, &set);
+        FD_SET(fd, &set);
         FD_SET(STDIN_FILENO, &set);
 
         /* wait until standard input or socket is ready */
@@ -115,9 +132,9 @@ enum zash_status client_connect_terminal_to_socket(int fd_socket)
         }
 
         /* if the socket is ready for reading, copy it content into standard output */
-        is_fd_ready = FD_ISSET(fd_socket, &set);
+        is_fd_ready = FD_ISSET(fd, &set);
         if (is_fd_ready) {
-            status = UTILS_copy_fd(fd_socket, STDOUT_FILENO, MAX_TRANSFER_LENGTH);
+            status = UTILS_copy_fd(fd, STDOUT_FILENO, MAX_TRANSFER_LENGTH);
             if (ZASH_STATUS_SUCCESS != status) {
                 DEBUG_PRINT("status: %d", status);
                 goto lbl_cleanup;
@@ -127,7 +144,7 @@ enum zash_status client_connect_terminal_to_socket(int fd_socket)
         /* if the standard input is ready for reading, copy it content into the scoket */
         is_fd_ready = FD_ISSET(STDIN_FILENO, &set);
         if (is_fd_ready) {
-            status = UTILS_copy_fd(STDIN_FILENO, fd_socket, MAX_TRANSFER_LENGTH);
+            status = UTILS_copy_fd(STDIN_FILENO, fd, MAX_TRANSFER_LENGTH);
             if (ZASH_STATUS_SUCCESS != status) {
                 DEBUG_PRINT("status: %d", status);
                 goto lbl_cleanup;
@@ -163,7 +180,7 @@ CLIENT_run(const char *interface, const char *ip, uint16_t port_to_knock, uint16
     }
 
     /* Connect standard io to the socket */
-    status = client_connect_terminal_to_socket(socket_fd);
+    status = client_connect_terminal_to_fd(socket_fd);
     /* If the function fail because of empty file, it is not an error - the shell was closed. */
     if ((ZASH_STATUS_SUCCESS != status) && (ZASH_STATUS_UTILS_COPY_FD_EMPTY_FILE != status)) {
         DEBUG_PRINT("status: %d", status);

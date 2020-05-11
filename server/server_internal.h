@@ -38,22 +38,27 @@ enum zash_status server_prepare(const char *interface,
 
 
 /**
- * @brief Get the port to listen for tcp connection through port knocking.
+ * @brief Get the address to connect to through port knocking.
  *
  * @param [in]     socket_context      the socket syn object to listen for port knocking with.
  *
  * @param [in]     port                the port to listen for port knocking on.
  *
- * @param [out]    listening_port      the port to listen for client tcp connection
+ * @param [out]    port_to_connect      the port to connect to.
+ *
+ * @param [out]    ip_to_connect        the ip to connect to.
  *
  * @return         return value indicating an error may returned.
  *
  * @note           This function may block until a client will port knock successfully.
  *
+ * @note           ip_to_connect must be previously allocated with at least 16 bytes length,
+ *                 the maximum size of an ip address.
  */
-enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
-                                           uint16_t port,
-                                           uint16_t *listening_port);
+enum zash_status server_get_address_to_connect(struct SOCKET_syn_context *context,
+                                               uint16_t port,
+                                               uint16_t *port_to_connect,
+                                               char *ip_to_connect);
 
 
 /**
@@ -65,6 +70,7 @@ enum zash_status server_get_listening_port(struct SOCKET_syn_context *context,
  *
  * @return         return value indicating an error may returned.
  *
+ * @note           this function will return only when the shell or the connection is closed.
  */
 enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket);
 

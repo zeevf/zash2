@@ -14,7 +14,7 @@
 #include "zash_status.h"
 
 /** Structs ***************************************************/
-/** @brief The context of syn sender object. send and receive syn packet. */
+/** @brief The context of syn transmitter object. send and receive syn packet. */
 struct SOCKET_syn_context;
 
 /** Functions ************************************************/
@@ -26,8 +26,6 @@ struct SOCKET_syn_context;
  * @param [out]    context           the newly created object.
  *
  * @return         return value indicating an error may returned.
- *
- * @note           this must be freed using SOCKET_syn_destroy.
  *
  * @note           this must be freed using SOCKET_syn_destroy.
  *
@@ -44,7 +42,7 @@ enum zash_status SOCKET_syn_create(const char *interface, struct SOCKET_syn_cont
  *
  * @param [in]     port              the destination port to send packet to.
  *
- * @param [in]     data              the payload to add to the syn packet.
+ * @param [in,opt] data              the payload to add to the syn packet.
  *
  * @param [in]     data_len          the length of the payload, in bytes.
  *
@@ -97,11 +95,21 @@ enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context);
 
 
 /**
- * @brief Run a tcp server that listen for tcp client connection and return the connected socket.
- *
- * @param [in]      interface           the name of the interface to listen for connection on.
+ * @brief Run a tcp server that listen for tcp client connection.
  *
  * @param [in]      port                the port to listen for connection on.
+ *
+ * @param [out]     socket_fd           the socket listening for clients.
+ *
+ * @return          return value indicating an error may returned.
+ */
+enum zash_status SOCKET_tcp_server(uint16_t port, int *socket_fd);
+
+
+/**
+ * @brief Accept a connection from a listening server.
+ *
+ * @param [in]      server_socket       a socket that listening for connections.
  *
  * @param [out]     socket_fd           the socket connected to the client.
  *
@@ -109,26 +117,22 @@ enum zash_status SOCKET_syn_destroy(struct SOCKET_syn_context *context);
  *
  * @note            this function may block until a tcp client will connect to the server.
  */
-enum zash_status SOCKET_tcp_server(const char *interface, uint16_t port, int *socket_fd);
-
+enum zash_status SOCKET_accept(int server_socket, int *socket_fd);
 
 /**
  * @brief Run a tcp client that connect to a tcp server and return the connected socket.
- *
- * @param [in]      interface           the name of the interface to connect with.
  *
  * @param [in]      ip                  the destination ip to connect to, as null terminated string.
  *
  * @param [in]      port                the destination port to connect to.
  *
- * @param [in]      socket_fd           the socket connected to the server.
+ * @param [out]     socket_fd           the socket connected to the server.
  *
  * @return          return value indicating an error may returned.
  *
- * @note            this function may block until a tcp server will listen for connection.
  */
 enum zash_status
-SOCKET_tcp_client(const char *interface, const char *ip, uint16_t port, int *socket_fd);
+SOCKET_tcp_client(const char *ip, uint16_t port, int *socket_fd);
 
 
 #endif //ZASH_SOCKET_H
