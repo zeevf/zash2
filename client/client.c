@@ -109,14 +109,17 @@ enum zash_status client_connect_terminal_to_fd(int fd)
 
     fd_set set = {0};
     int nfds = 0;
+    int ready_fd = INVALID_FILE_DESCRIPTOR;
+    int dest_fd = INVALID_FILE_DESCRIPTOR;
     int return_value = C_STANDARD_FAILURE_VALUE;
     bool is_fd_ready = false;
+    bool should_transfer_stop = false;
 
     /* Set number of fds to contain the socket and standard input */
     nfds = MAX(fd, STDIN_FILENO) + 1;
 
     /* Transform data from standard io to the shell */
-    while (true) {
+    while (false == should_transfer_stop) {
 
         /* Reset the fd set to contain standard input and socket */
         FD_ZERO(&set);
@@ -131,24 +134,25 @@ enum zash_status client_connect_terminal_to_fd(int fd)
             goto lbl_cleanup;
         }
 
-        /* if the socket is ready for reading, copy it content into standard output */
+        /* Check if the fd is ready for reading */
         is_fd_ready = FD_ISSET(fd, &set);
         if (is_fd_ready) {
-            status = UTILS_copy_fd(fd, STDOUT_FILENO, MAX_TRANSFER_LENGTH);
-            if (ZASH_STATUS_SUCCESS != status) {
-                DEBUG_PRINT("status: %d", status);
-                goto lbl_cleanup;
-            }
+            ready_fd = fd;
+            dest_fd = STDOUT_FILENO;
         }
 
-        /* if the standard input is ready for reading, copy it content into the scoket */
+        /* Check if stdin is ready for reading */
         is_fd_ready = FD_ISSET(STDIN_FILENO, &set);
         if (is_fd_ready) {
-            status = UTILS_copy_fd(STDIN_FILENO, fd, MAX_TRANSFER_LENGTH);
-            if (ZASH_STATUS_SUCCESS != status) {
-                DEBUG_PRINT("status: %d", status);
-                goto lbl_cleanup;
-            }
+            ready_fd = STDIN_FILENO;
+            dest_fd = fd;
+        }
+
+        /* Copy form the fd that ready for reading into its destination */
+        status = UTILS_copy_fd(ready_fd, dest_fd, MAX_TRANSFER_LENGTH);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
         }
     }
 

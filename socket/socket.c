@@ -452,14 +452,14 @@ enum zash_status SOCKET_syn_create(const char *interface, struct SOCKET_syn_cont
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
-#if 0
+
     /* Bind the socket to the interface */
     status = socket_bind_interface(temp_socket, interface);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
-#endif
+
     /* Get the source ip of the interface */
     status = socket_get_interface_ip(temp_socket, interface, &temp_context->source_ip);
     if (ZASH_STATUS_SUCCESS != status) {
@@ -696,8 +696,6 @@ enum zash_status SOCKET_tcp_server(uint16_t port, int *socket_fd)
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
-
-    DEBUG_PRINT("try port: %d", address.sin_port);
 
     /* Bind the socket to an address */
     return_value = bind(server_socket, (const struct sockaddr *)&address, sizeof(address));

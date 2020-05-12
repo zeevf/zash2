@@ -109,39 +109,39 @@ enum zash_status daemon_open_standard_files(char *path)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
-    int null_fd = INVALID_FILE_DESCRIPTOR;
-    int fd = INVALID_FILE_DESCRIPTOR;
+    int path_fd = INVALID_FILE_DESCRIPTOR;
+    int io_fd = INVALID_FILE_DESCRIPTOR;
 
     /* Check for valid parameters */
     ASSERT(NULL != path);
 
-    /* Open the null file */
-    null_fd = open(path, O_RDWR);
-    if (INVALID_FILE_DESCRIPTOR == null_fd) {
+    /* Open the path */
+    path_fd = open(path, O_RDWR);
+    if (INVALID_FILE_DESCRIPTOR == path_fd) {
         status = ZASH_STATUS_DAEMON_OPEN_STANDARD_FILES_OPEN_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
-    /* open duplicate the null file into stdin */
-    fd = dup2(null_fd, STDIN_FILENO);
-    if (INVALID_FILE_DESCRIPTOR == fd) {
+    /* open duplicate the path file into stdin */
+    io_fd = dup2(path_fd, STDIN_FILENO);
+    if (INVALID_FILE_DESCRIPTOR == io_fd) {
         status = ZASH_STATUS_DAEMON_OPEN_STANDARD_FILES_DUP_STDIN_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
-    /* open duplicate the null file into stdout */
-    fd = dup2(null_fd, STDOUT_FILENO);
-    if (INVALID_FILE_DESCRIPTOR == fd) {
+    /* open duplicate the path file into stdout */
+    io_fd = dup2(path_fd, STDOUT_FILENO);
+    if (INVALID_FILE_DESCRIPTOR == io_fd) {
         status = ZASH_STATUS_DAEMON_OPEN_STANDARD_FILES_DUP_STDOUT_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
-    /* open duplicate the null file into stderr */
-    fd = dup2(null_fd, STDERR_FILENO);
-    if (INVALID_FILE_DESCRIPTOR == fd) {
+    /* open duplicate the path file into stderr */
+    io_fd = dup2(path_fd, STDERR_FILENO);
+    if (INVALID_FILE_DESCRIPTOR == io_fd) {
         status = ZASH_STATUS_DAEMON_OPEN_STANDARD_FILES_DUP_STDERR_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
@@ -152,9 +152,9 @@ enum zash_status daemon_open_standard_files(char *path)
 
 lbl_cleanup:
 
-    /* Close the null fd if it is not a standard file */
-    if ((STDIN_FILENO != null_fd) && (STDOUT_FILENO != null_fd) && (STDERR_FILENO != null_fd)) {
-        CLOSE(null_fd);
+    /* Close the path fd if it is not a standard file */
+    if ((STDIN_FILENO != path_fd) && (STDOUT_FILENO != path_fd) && (STDERR_FILENO != path_fd)) {
+        CLOSE(path_fd);
     }
 
     return status;

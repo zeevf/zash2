@@ -297,6 +297,7 @@ enum zash_status SERVER_run(uint16_t port, const char *interface)
     uint16_t port_to_connect = 0;
     int fd_socket = INVALID_FILE_DESCRIPTOR;
     char ip[SERVER_MAX_IP_LENGTH] = {0};
+    bool should_server_stop = false;
 
     /* Check for valid parameters */
     if (NULL == interface) {
@@ -313,7 +314,7 @@ enum zash_status SERVER_run(uint16_t port, const char *interface)
     }
 
     /* Run the server forever. */
-    while (true) {
+    while (false == should_server_stop) {
 
         /* Get the address that to connect */
         status = server_get_address_to_connect(socket_context, port, &port_to_connect, ip);
