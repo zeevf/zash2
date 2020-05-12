@@ -84,5 +84,7 @@ enum zash_status UTILS_copy_file(const char *path, const char *new_path);
  */
 enum zash_status UTILS_copy_fd(int source, int dest, size_t length);
 
-
+//TODO: docu
+//TODO: typedef
+enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *args), void *args);
 #endif //ZASH_UTILS_H

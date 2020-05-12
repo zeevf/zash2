@@ -88,9 +88,8 @@ enum zash_status server_get_address_to_connect(struct SOCKET_syn_context *contex
                                                uint16_t *port_to_connect,
                                                char *ip_to_connect);
 
-
 /**
- * @brief Run a shell and attach it standard io to a socket.
+ * @brief Run a shell in new process, and attach it standard io to a socket.
  *
  * @param [in]     shell               the shell to run.
  *

@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <stdbool.h>
+#include <sys/wait.h>
 
 #include "common.h"
 
@@ -129,8 +130,7 @@ enum zash_status UTILS_create_dirs(const char *path)
                 DEBUG_PRINT("status: %d, current_dir: %s", status, current_dir);
                 goto lbl_cleanup;
             }
-        }
-        else {
+        } else {
             /* Create the directory. */
             return_value = mkdir(current_dir, UTILS_NEW_DIR_PERM);
             if ((C_STANDARD_FAILURE_VALUE == return_value)) {
@@ -308,7 +308,7 @@ enum zash_status UTILS_copy_file(const char *path, const char *new_path)
     }
 
     /* copy the file */
-    (void) memcpy(destination, source, stat_buffer.st_size);
+    (void)memcpy(destination, source, stat_buffer.st_size);
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
@@ -322,6 +322,7 @@ lbl_cleanup:
 
     return status;
 }
+
 
 enum zash_status UTILS_copy_fd(int source, int dest, size_t length)
 {
@@ -373,3 +374,61 @@ lbl_cleanup:
     return status;
 
 }
+
+//TODO: docu
+enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *args), void *args)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    int pid = INVALID_FILE_DESCRIPTOR;
+    int wstatus = 0;
+    int wait_return_value = C_STANDARD_FAILURE_VALUE;
+
+    /* Check for valid parameters */
+    if (NULL == function) {
+        status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_NULL_POINTER;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    pid = fork();
+    switch (pid) {
+    case INVALID_FILE_DESCRIPTOR:
+        status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_FORK_FAILD;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+
+    case CHILD_PROCESS:
+        status = function(args);
+        exit((int)status);
+
+    default:
+        wait_return_value = wait(&wstatus);
+        if (C_STANDARD_FAILURE_VALUE == wait_return_value) {
+            status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_WAIT_FAILED;
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+
+        if (false == WIFEXITED(wstatus)) {
+            status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_CHILD_TERMINATED;
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+
+        if (ZASH_STATUS_SUCCESS != WEXITSTATUS(wstatus)) {
+            status = (enum zash_status)WEXITSTATUS(wstatus);
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+    }
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+
+}
+
