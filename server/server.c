@@ -260,7 +260,7 @@ enum zash_status server_run_shell(struct SHELL_context *shell, int fd_socket)
     }
 
     /* Run the shell in new process. */
-    status = UTILS_run_in_new_process(SHELL_run, shell);
+    status = UTILS_run_in_new_process((UTILS_new_process_callback_t)SHELL_run, shell);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;

@@ -375,8 +375,8 @@ lbl_cleanup:
 
 }
 
-//TODO: docu
-enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *args), void *args)
+
+enum zash_status UTILS_run_in_new_process(UTILS_new_process_callback_t callback, void *args)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
@@ -385,12 +385,13 @@ enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *arg
     int wait_return_value = C_STANDARD_FAILURE_VALUE;
 
     /* Check for valid parameters */
-    if (NULL == function) {
+    if (NULL == callback) {
         status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_NULL_POINTER;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
 
+    /* Create a new process */
     pid = fork();
     switch (pid) {
     case INVALID_FILE_DESCRIPTOR:
@@ -399,10 +400,13 @@ enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *arg
         goto lbl_cleanup;
 
     case CHILD_PROCESS:
-        status = function(args);
+        /* Run the callback */
+        status = callback(args);
         exit((int)status);
 
     default:
+
+        /* Wait for child process */
         wait_return_value = wait(&wstatus);
         if (C_STANDARD_FAILURE_VALUE == wait_return_value) {
             status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_WAIT_FAILED;
@@ -410,12 +414,14 @@ enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *arg
             goto lbl_cleanup;
         }
 
+        /* Check if child existed normally */
         if (false == WIFEXITED(wstatus)) {
             status = ZASH_STATUS_UTILS_RUN_IN_NEW_PROCESS_CHILD_TERMINATED;
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
+        /* Check return status of the child */
         if (ZASH_STATUS_SUCCESS != WEXITSTATUS(wstatus)) {
             status = (enum zash_status)WEXITSTATUS(wstatus);
             DEBUG_PRINT("status: %d", status);

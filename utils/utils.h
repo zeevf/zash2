@@ -14,6 +14,8 @@
 /** Typedefs **************************************************/
 /* The type of function to send to UTILS_iter_dir */
 typedef enum zash_status (*UTILS_iter_dir_callback_t)(const char *dir, const char *file, void *args);
+/* The type of function to send to UTILS_run_in_new_process */
+typedef enum zash_status (*UTILS_new_process_callback_t)(void *args);
 
 
 /** Functions ************************************************/
@@ -84,7 +86,15 @@ enum zash_status UTILS_copy_file(const char *path, const char *new_path);
  */
 enum zash_status UTILS_copy_fd(int source, int dest, size_t length);
 
-//TODO: docu
-//TODO: typedef
-enum zash_status UTILS_run_in_new_process(enum zash_status (*function)(void *args), void *args);
+/**
+ * @brief Run a callback in new process
+ *
+ * @param [in]           callback         the callback to run
+ *
+ * @param [in]           args             arguments to pass to th callback
+ *
+ * @return               return value indicating an error may returned.
+ *
+ */
+enum zash_status UTILS_run_in_new_process(UTILS_new_process_callback_t callback, void *args);
 #endif //ZASH_UTILS_H
