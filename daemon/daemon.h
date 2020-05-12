@@ -15,7 +15,7 @@
 
 /**
  * @brief Make this process a daemon process. that means:
- *          -  the process will become a new process that is a session leader, with init as
+ *          -  the process will become a new process that is in a new session, with init as
  *             parent process.
  *          -  the umask will be reset.
  *          -  the cwd will become root directory.

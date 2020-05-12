@@ -159,7 +159,7 @@ lbl_cleanup:
 
 
 enum zash_status
-CLIENT_run(const char *interface, const char *ip, uint16_t port_to_knock, uint16_t port_to_connect)
+CLIENT_run(const char *interface, const char *ip, uint16_t port_to_knock, uint16_t listen_port)
 {
 
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
@@ -173,7 +173,7 @@ CLIENT_run(const char *interface, const char *ip, uint16_t port_to_knock, uint16
     }
 
     /* Use port knocking to connect to the server */
-    status = client_port_knock(interface, ip, port_to_knock, port_to_connect, &socket_fd);
+    status = client_port_knock(interface, ip, port_to_knock, listen_port, &socket_fd);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;

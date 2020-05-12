@@ -16,17 +16,16 @@
 
 
 /** Functions ************************************************/
-enum zash_status daemon_become_session_leader(void)
+enum zash_status daemon_become_new_process(void)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
 
     pid_t pid = INVALID_PROCESS_ID;
-    pid_t setsid_return_value = C_STANDARD_FAILURE_VALUE;
 
     /* switch into new process */
     pid = fork();
     if (C_STANDARD_FAILURE_VALUE == pid) {
-        status = ZASH_STATUS_DAEMON_BECOME_SESSION_LEADER_FORK_FAILED;
+        status = ZASH_STATUS_DAEMON_BECOME_NEW_PROCESS_FORK_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
@@ -34,6 +33,28 @@ enum zash_status daemon_become_session_leader(void)
     /* Exit the parent process */
     if (CHILD_PROCESS != pid) {
         exit(EXIT_SUCCESS);
+    }
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    return status;
+}
+
+
+enum zash_status daemon_become_session_leader(void)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+
+    pid_t setsid_return_value = C_STANDARD_FAILURE_VALUE;
+
+    /* switch into new process */
+    status = daemon_become_new_process();
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
     }
 
     /* Create a new session */
@@ -160,6 +181,13 @@ enum zash_status DAEMON_daemonize(void)
 
     /* Switch into a new session leader file. */
     status = daemon_become_session_leader();
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* Switch into a new process */
+    status = daemon_become_new_process();
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;

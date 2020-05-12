@@ -11,12 +11,24 @@
 /** Headers ***************************************************/
 #include "socket/socket.h"
 #include "shell/shell.h"
+#include "vector/vector.h"
 
 #include "server.h"
 
-/** Constants ***************************************************/
+/** Constants *************************************************/
 /* The maximum length of an ip4 text. */
-#define SERVER_MAX_IP_LENGTH (16)
+#define SERVER_MAX_IP_LENGTH (17)
+
+
+/** Structs ***************************************************/
+/** @brief This struct used for count port knocks form a specific client. */
+struct server_port_knock_counter {
+    /* The ip of the client who sent the port knocks */
+    char ip[SERVER_MAX_IP_LENGTH];
+    /* The number of port knocks sent */
+    size_t count;
+};
+
 
 /**
  * @brief Prepare the server for running - create shell and SOCKET_syn objects and become a daemon.
@@ -38,11 +50,27 @@ enum zash_status server_prepare(const char *interface,
 
 
 /**
+ * @brief Count the knocks that has sent from a specific ip.
+ *
+ * @param [in]     context              the vector contains all counters of previous knocks.
+ *
+ * @param [in]     ip                   the ip sent the port knock
+ *
+ * @param [out]    port_knock_count     the amount of knocks sent by ip.
+ *
+ * @return         return value indicating an error may returned.
+ *
+ */
+enum zash_status
+server_count_port_knocks(struct VECTOR_context *context, const char *ip, size_t *port_knock_count);
+
+
+/**
  * @brief Get the address to connect to through port knocking.
  *
- * @param [in]     socket_context      the socket syn object to listen for port knocking with.
+ * @param [in]     socket_context       the socket syn object to listen for port knocking with.
  *
- * @param [in]     port                the port to listen for port knocking on.
+ * @param [in]     port                 the port to listen for port knocking on.
  *
  * @param [out]    port_to_connect      the port to connect to.
  *

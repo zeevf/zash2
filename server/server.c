@@ -12,9 +12,11 @@
 #include "common.h"
 #include "config.h"
 #include "daemon/daemon.h"
+#include "utils/utils.h"
 
 #include "server.h"
 #include "server_internal.h"
+
 
 /** Functions ************************************************/
 enum zash_status server_prepare(const char *interface,
@@ -73,56 +75,152 @@ lbl_cleanup:
 }
 
 
+enum zash_status
+server_count_port_knocks(struct VECTOR_context *context, const char *ip, size_t *port_knock_count)
+{
+    enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+    enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
+
+    struct server_port_knock_counter **counters = NULL;
+    struct server_port_knock_counter *counter = NULL;
+    struct server_port_knock_counter *new_counter = NULL;
+    size_t counter_length = 0;
+    size_t i = 0;
+    bool is_ip_exist = false;
+    int strcmp_return_value = 0;
+
+    /* Check for valid parameters */
+    ASSERT(NULL != context);
+    ASSERT(NULL != ip);
+    ASSERT(NULL != port_knock_count);
+
+    /* Get access to previous knock counters as an array */
+    status = VECTOR_as_array(context, (void ***)&counters, &counter_length);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
+
+    /* For each existing counter, check if it the counter of our ip */
+    for (i = 0; i < counter_length; ++i) {
+
+        /* check if it the counter of our ip */
+        strcmp_return_value = strncmp(ip, counters[i]->ip, SERVER_MAX_IP_LENGTH);
+        if (0 == strcmp_return_value) {
+            counter = counters[i];
+            is_ip_exist = true;
+        }
+    }
+
+    /* If our counter want found, create a new one */
+    if (false == is_ip_exist) {
+
+        /* Allocate memory for new counter */
+        new_counter = HEAPALLOCZ(sizeof(*new_counter));
+        if (NULL == new_counter) {
+            status = ZASH_STARUS_SERVER_COUNT_PORT_KNOCKS_CALLOC_FAILED;
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+
+        /* Copy ip into new counter */
+        (void)strncpy(new_counter->ip, ip, SERVER_MAX_IP_LENGTH);
+
+        /* Push the new counter into the vector */
+        status = VECTOR_push(context, new_counter);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
+        }
+
+        counter = new_counter;
+        new_counter = NULL;
+    }
+
+    /* Increase counter */
+    counter->count++;
+
+    /* Transfer Ownership */
+    *port_knock_count = counter->count;
+    counter = NULL;
+
+    /* Indicate Success */
+    status = ZASH_STATUS_SUCCESS;
+
+lbl_cleanup:
+
+    HEAPFREE(new_counter);
+    HEAPFREE(counters);
+
+    return status;
+}
+
+
 enum zash_status server_get_address_to_connect(struct SOCKET_syn_context *context,
                                                uint16_t port,
                                                uint16_t *port_to_connect,
                                                char *ip_to_connect)
 {
     enum zash_status status = ZASH_STATUS_UNINITIALIZED;
+    enum zash_status temp_status = ZASH_STATUS_UNINITIALIZED;
 
-    size_t amount_of_knocking = 0;
-    char previous_ip[SERVER_MAX_IP_LENGTH] = {0};
+    struct VECTOR_context *port_knocks = NULL;
     char ip[SERVER_MAX_IP_LENGTH] = {0};
-    uint16_t temp_listening_port = 0;
+    uint16_t temp_port_to_connect = 0;
+    size_t port_knock_counter = 0;
     size_t data_len = 0;
-    int strncmp_return_value = 0;
 
     /* Check for valid parameters */
     ASSERT(NULL != context);
     ASSERT(NULL != port_to_connect);
     ASSERT(NULL != ip_to_connect);
 
-    /* Listen for port knocking until 5 knocks arrive from the same address */
-    while (amount_of_knocking < ZASH_NUMBER_OF_SYN_KNOCKS) {
+    /* Create vector of counters to count port knocks from different ips */
+    status = VECTOR_create(&port_knocks);
+    if (ZASH_STATUS_SUCCESS != status) {
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
+    }
 
-        data_len = sizeof(temp_listening_port);
+    /* Until receiving 5 port knocks rom the same ip, continue to listen for port knocks */
+    while (ZASH_NUMBER_OF_SYN_KNOCKS > port_knock_counter) {
+        data_len = sizeof(temp_port_to_connect);
 
-        /* Get a port knock - a syn packet */
-        status = SOCKET_syn_receive(context, port, &data_len, (uint8_t *)&temp_listening_port, ip);
+        /* Receive a syn packet */
+        status = SOCKET_syn_receive(context, port, &data_len, (uint8_t *)&temp_port_to_connect, ip);
         if (ZASH_STATUS_SUCCESS != status) {
             DEBUG_PRINT("status: %d", status);
             goto lbl_cleanup;
         }
 
-        /* Check if the source ip of the syn packet is the same as the previous one. */
-        strncmp_return_value = strncmp(ip, previous_ip, SERVER_MAX_IP_LENGTH);
-        if (0 != strncmp_return_value) {
-            amount_of_knocking = 0;
+        /* Count the port knocks received from the ip */
+        status = server_count_port_knocks(port_knocks, ip, &port_knock_counter);
+        if (ZASH_STATUS_SUCCESS != status) {
+            DEBUG_PRINT("status: %d", status);
+            goto lbl_cleanup;
         }
+    }
 
-        amount_of_knocking++;
-        (void)strncpy(previous_ip, ip, SERVER_MAX_IP_LENGTH);
-
+    /* If the ip didnt sent enough data, we can't communicate with it */
+    if (sizeof(temp_port_to_connect) > data_len) {
+        status = ZASH_STATUS_SERVER_GET_ADDRESS_TO_CONNECT_NOT_ENOUGH_DATA_RECEIVED;
+        DEBUG_PRINT("status: %d", status);
+        goto lbl_cleanup;
     }
 
     /* Transfer Ownership */
-    *port_to_connect = temp_listening_port;
+    *port_to_connect = temp_port_to_connect;
     (void)strncpy(ip_to_connect, ip, SERVER_MAX_IP_LENGTH);
 
     /* Indicate Success */
     status = ZASH_STATUS_SUCCESS;
 
 lbl_cleanup:
+
+    if (NULL != port_knocks) {
+        temp_status = VECTOR_destroy(port_knocks, UTILS_free);
+        ZASH_UPDATE_STATUS(temp_status, status);
+    }
 
     return status;
 }
@@ -198,7 +296,7 @@ enum zash_status SERVER_run(uint16_t port, const char *interface)
     struct SOCKET_syn_context *socket_context = NULL;
     uint16_t port_to_connect = 0;
     int fd_socket = INVALID_FILE_DESCRIPTOR;
-    char ip [SERVER_MAX_IP_LENGTH] = {0};
+    char ip[SERVER_MAX_IP_LENGTH] = {0};
 
     /* Check for valid parameters */
     if (NULL == interface) {

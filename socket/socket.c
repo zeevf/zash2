@@ -71,7 +71,7 @@ enum zash_status socket_get_interface_ip(int socket_fd, const char *interface, u
     /* Get interface ip */
     return_value = ioctl(socket_fd, SIOCGIFADDR, &request);
     if (C_STANDARD_FAILURE_VALUE == return_value) {
-        status = ZASH_STATUS_SOCKET_SYN_CREATE_IOCTL_FAILED;
+        status = ZASH_STATUS_SOCKET_GET_INTERFACE_IP_IOCTL_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
@@ -452,14 +452,14 @@ enum zash_status SOCKET_syn_create(const char *interface, struct SOCKET_syn_cont
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
-
+#if 0
     /* Bind the socket to the interface */
     status = socket_bind_interface(temp_socket, interface);
     if (ZASH_STATUS_SUCCESS != status) {
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
-
+#endif
     /* Get the source ip of the interface */
     status = socket_get_interface_ip(temp_socket, interface, &temp_context->source_ip);
     if (ZASH_STATUS_SUCCESS != status) {
@@ -697,6 +697,8 @@ enum zash_status SOCKET_tcp_server(uint16_t port, int *socket_fd)
         goto lbl_cleanup;
     }
 
+    DEBUG_PRINT("try port: %d", address.sin_port);
+
     /* Bind the socket to an address */
     return_value = bind(server_socket, (const struct sockaddr *)&address, sizeof(address));
     if (C_STANDARD_FAILURE_VALUE == return_value) {
@@ -747,7 +749,7 @@ enum zash_status SOCKET_accept(int server_socket, int *socket_fd)
     /* Accept the connection */
     temp_socket = accept(server_socket, NULL, NULL);
     if (INVALID_FILE_DESCRIPTOR == temp_socket) {
-        status = ZASH_STATUS_SOCKET_TCP_SERVER_ACCEPT_FAILED;
+        status = ZASH_STATUS_SOCKET_ACCEPT_ACCEPT_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }
@@ -756,7 +758,7 @@ enum zash_status SOCKET_accept(int server_socket, int *socket_fd)
     linger_val.l_onoff = true;
     return_value = setsockopt(temp_socket, SOL_SOCKET, SO_LINGER, &linger_val, sizeof(linger_val));
     if (C_STANDARD_FAILURE_VALUE == return_value) {
-        status = ZASH_STATUS_SOCKET_TCP_SERVER_SERSOCKOPT_FAILED;
+        status = ZASH_STATUS_SOCKET_ACCEPT_SERSOCKOPT_FAILED;
         DEBUG_PRINT("status: %d", status);
         goto lbl_cleanup;
     }

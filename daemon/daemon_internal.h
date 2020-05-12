@@ -18,6 +18,15 @@
 
 /** Functions ************************************************/
 /**
+ * @brief Return as a new process, and exit from the old one.
+ *
+ * @return      return value indicating an error may returned.
+ *
+ */
+enum zash_status daemon_become_new_process(void);
+
+
+/**
  * @brief Become a new process that is a session leader.
  *
  * @return      return value indicating an error may returned.
